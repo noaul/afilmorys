@@ -78,5 +78,39 @@ export const computeViewerImageFrame = (
     width: displayWidth,
     height: displayHeight,
     borderRadius: 0,
+    rotate: 0,
+  }
+}
+
+interface ViewerFrameTransformSnapshot {
+  borderRadius: number
+  rotate: number
+  scale: number
+  translateX: number
+  translateY: number
+}
+
+interface ViewportRectLike {
+  height: number
+  left: number
+  top: number
+  width: number
+}
+
+export const projectViewerImageFrame = (
+  frame: AnimationFrameRect,
+  viewportRect: ViewportRectLike,
+  snapshot: ViewerFrameTransformSnapshot,
+): AnimationFrameRect => {
+  const originX = viewportRect.left + viewportRect.width * 0.5
+  const originY = viewportRect.top + viewportRect.height * 0.18
+
+  return {
+    left: originX + (frame.left - originX) * snapshot.scale + snapshot.translateX,
+    top: originY + (frame.top - originY) * snapshot.scale + snapshot.translateY,
+    width: frame.width * snapshot.scale,
+    height: frame.height * snapshot.scale,
+    borderRadius: snapshot.borderRadius,
+    rotate: snapshot.rotate,
   }
 }
