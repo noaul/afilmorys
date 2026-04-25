@@ -5,17 +5,10 @@
   "license": "MIT",
   "type": "module",
   "exports": {
-    ".": {
-      "types": "./dist/index.d.mts",
-      "import": "./dist/index.mjs"
-    },
-    "./*": {
-      "types": "./dist/*.d.mts",
-      "import": "./dist/*.mjs"
-    }
+    ".": "./src/index.ts",
+    "./*": "./src/*"
   },
-  "main": "./dist/index.mjs",
-  "types": "./dist/index.d.mts",
+  "main": "./src/index.ts",
   "files": [
     "dist"
   ],
@@ -38,5 +31,20 @@
   "peerDependencies": {
     "react": "^19.1.1",
     "react-dom": "^19.1.1"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.mjs",
+    "types": "./dist/index.d.mts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.mts",
+        "import": "./dist/index.mjs"
+      },
+      "./*": {
+        "types": "./dist/*.d.mts",
+        "import": "./dist/*.mjs"
+      }
+    }
   }
 }
