@@ -1,40 +1,38 @@
-import { Spring } from '@afilmory/utils'
 import { useDrag } from '@use-gesture/react'
 import { animate, useMotionValue, useTransform } from 'motion/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-import { useViewport } from '~/hooks/useViewport'
+import {
+  clamp,
+  createDismissPresentationSnapshot,
+  easeOutCubic,
+  easeOutQuad,
+  resolveMobileViewerInteractionMetrics,
+} from './mobile-interaction-utils'
+import { ViewerSpring } from './spring'
+import type { UseViewerMobileInteractionsOptions } from './types'
+import { useWindowViewport } from './useWindowViewport'
 
-const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), max)
-const easeOutCubic = (value: number) => 1 - Math.pow(1 - value, 3)
-const easeOutQuad = (value: number) => 1 - Math.pow(1 - value, 2)
-
-interface MobilePhotoViewerInteractionsOptions {
-  enabled: boolean
-  isImageZoomed: boolean
-  onDismiss: (snapshot: MobilePhotoViewerDismissSnapshot) => void
+interface GestureMemoState {
+  ignore: boolean
+  inspectorPixels: number
+  startedWithInspectorOpen: boolean
 }
 
-export interface MobilePhotoViewerDismissSnapshot {
-  borderRadius: number
-  rotate: number
-  scale: number
-  translateX: number
-  translateY: number
-}
-
-export const usePhotoViewerMobileInteractions = ({
+export const useViewerMobileInteractions = ({
   enabled,
   isImageZoomed,
   onDismiss,
-}: MobilePhotoViewerInteractionsOptions) => {
-  const viewport = useViewport((value) => ({ width: value.w, height: value.h }))
-  const viewportWidth = viewport.width || (typeof window !== 'undefined' ? window.innerWidth : 390)
-  const viewportHeight = viewport.height || (typeof window !== 'undefined' ? window.innerHeight : 844)
+  viewport,
+}: UseViewerMobileInteractionsOptions) => {
+  const windowViewport = useWindowViewport()
+  const viewportWidth = viewport?.width || windowViewport.width || 390
+  const viewportHeight = viewport?.height || windowViewport.height || 844
 
-  const inspectorRevealDistance = useMemo(() => clamp(viewportHeight * 0.34, 220, 320), [viewportHeight])
-  const dismissThreshold = useMemo(() => clamp(viewportHeight * 0.18, 120, 180), [viewportHeight])
-  const dismissTravel = useMemo(() => viewportHeight + 160, [viewportHeight])
+  const { dismissThreshold, dismissTravel, inspectorRevealDistance } = useMemo(
+    () => resolveMobileViewerInteractionMetrics(viewportHeight),
+    [viewportHeight],
+  )
 
   const inspectorProgress = useMotionValue(0)
   const dismissX = useMotionValue(0)
@@ -85,7 +83,7 @@ export const usePhotoViewerMobileInteractions = ({
     (value: typeof inspectorProgress | typeof dismissX | typeof dismissY, to: number, velocity = 0) => {
       return registerAnimation(
         animate(value, to, {
-          ...Spring.presets.smooth,
+          ...ViewerSpring.presets.smooth,
           velocity,
         }),
       )
@@ -94,18 +92,13 @@ export const usePhotoViewerMobileInteractions = ({
   )
 
   const getDismissPresentationSnapshot = useCallback(
-    (translateX = dismissX.get(), translateY = dismissY.get()): MobilePhotoViewerDismissSnapshot => {
-      const dismissRatio = clamp(translateY / Math.max(dismissTravel, 1), 0, 1)
-      const dismissVisual = easeOutQuad(dismissRatio)
-
-      return {
+    (translateX = dismissX.get(), translateY = dismissY.get()) =>
+      createDismissPresentationSnapshot({
         translateX,
         translateY,
-        scale: clamp(1 - dismissVisual * 0.13, 0.8, 1),
-        rotate: (translateX / Math.max(viewportWidth, 1)) * (4.5 + dismissVisual * 2.5),
-        borderRadius: dismissVisual * 22,
-      }
-    },
+        dismissTravel,
+        viewportWidth,
+      }),
     [dismissTravel, dismissX, dismissY, viewportWidth],
   )
 
@@ -118,12 +111,12 @@ export const usePhotoViewerMobileInteractions = ({
 
       registerAnimation(
         animate(inspectorProgress, open ? 1 : 0, {
-          ...Spring.smooth(open ? 0.32 : 0.28),
+          ...ViewerSpring.smooth(open ? 0.32 : 0.28),
           velocity: settleVelocity,
         }),
       )
-      registerAnimation(animate(dismissX, 0, Spring.smooth(0.26)))
-      registerAnimation(animate(dismissY, 0, Spring.smooth(open ? 0.28 : 0.24)))
+      registerAnimation(animate(dismissX, 0, ViewerSpring.smooth(0.26)))
+      registerAnimation(animate(dismissY, 0, ViewerSpring.smooth(open ? 0.28 : 0.24)))
     },
     [dismissX, dismissY, inspectorProgress, registerAnimation, stopAnimations],
   )
@@ -149,14 +142,14 @@ export const usePhotoViewerMobileInteractions = ({
 
       registerAnimation(
         animate(dismissX, targetX, {
-          ...Spring.snappy(0.18, 0.06),
+          ...ViewerSpring.snappy(0.18, 0.06),
           velocity: clampedVelocityX * viewportWidth * 0.14,
         }),
       )
 
       registerAnimation(
         animate(dismissY, targetY, {
-          ...Spring.snappy(0.18, 0.04),
+          ...ViewerSpring.snappy(0.18, 0.04),
           velocity: Math.max(clampedVelocityY * viewportHeight * 0.08, 160),
           onComplete: () => {
             onDismiss(getDismissPresentationSnapshot(targetX, targetY))
@@ -198,18 +191,17 @@ export const usePhotoViewerMobileInteractions = ({
         return memo
       }
 
-      const start =
-        memo ??
-        ({
-          inspectorPixels: inspectorProgress.get() * inspectorRevealDistance,
-          startedWithInspectorOpen: inspectorProgress.get() > 0.02,
-          ignore: false,
-        } as const)
+      const start: GestureMemoState = memo ?? {
+        inspectorPixels: inspectorProgress.get() * inspectorRevealDistance,
+        startedWithInspectorOpen: inspectorProgress.get() > 0.02,
+        ignore: false,
+      }
 
       if (first && event.target instanceof HTMLElement) {
         const isInteractiveTarget = Boolean(
           event.target.closest('button, a, [role="button"], [data-viewer-interactive]'),
         )
+
         if (isInteractiveTarget) {
           return {
             ...start,
@@ -322,9 +314,9 @@ export const usePhotoViewerMobileInteractions = ({
   const chromeY = useTransform(
     () => dismissY.get() * 0.08 - inspectorVisualProgress.get() * 12 - dismissVisualProgress.get() * 6,
   )
-  const thumbnailsOpacity = useTransform(() => {
-    return clamp(1 - inspectorVisualProgress.get() * 1.05 - dismissVisualProgress.get() * 0.58, 0, 1)
-  })
+  const thumbnailsOpacity = useTransform(() =>
+    clamp(1 - inspectorVisualProgress.get() * 1.05 - dismissVisualProgress.get() * 0.58, 0, 1),
+  )
   const thumbnailsY = useTransform(() => inspectorVisualProgress.get() * 18 + dismissVisualProgress.get() * 10)
   const stageHintOpacity = useTransform(() =>
     clamp(0.42 - inspectorVisualProgress.get() * 0.66 - dismissVisualProgress.get() * 0.54, 0, 0.42),
@@ -332,7 +324,10 @@ export const usePhotoViewerMobileInteractions = ({
   const stageHintY = useTransform(() => inspectorVisualProgress.get() * 10 + dismissVisualProgress.get() * 12)
 
   return {
+    backdropOpacity,
     bindStage,
+    chromeOpacity,
+    chromeY,
     closeInspector,
     dismissX,
     dismissY,
@@ -351,8 +346,5 @@ export const usePhotoViewerMobileInteractions = ({
     viewerLiftY,
     viewerRotate,
     viewerScale,
-    backdropOpacity,
-    chromeOpacity,
-    chromeY,
   }
 }

@@ -450,6 +450,9 @@ importers:
       '@afilmory/utils':
         specifier: workspace:*
         version: link:../../packages/utils
+      '@afilmory/viewer-motion':
+        specifier: workspace:*
+        version: link:../../packages/viewer-motion
       '@afilmory/webgl-viewer':
         specifier: workspace:*
         version: link:../../packages/webgl-viewer
@@ -1450,6 +1453,28 @@ importers:
         specifier: 12.34.0
         version: 12.34.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
 
+  packages/viewer-motion:
+    dependencies:
+      '@use-gesture/react':
+        specifier: 10.3.1
+        version: 10.3.1(react@19.2.4)
+      motion:
+        specifier: 12.34.0
+        version: 12.34.0(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+    devDependencies:
+      '@types/react':
+        specifier: 'catalog:'
+        version: 19.2.14
+      '@types/react-dom':
+        specifier: 'catalog:'
+        version: 19.2.3(@types/react@19.2.14)
+      react:
+        specifier: ^19.2.4
+        version: 19.2.4
+      react-dom:
+        specifier: ^19.2.4
+        version: 19.2.4(react@19.2.4)
+
   packages/webgl-viewer:
     devDependencies:
       '@types/react':
@@ -1466,7 +1491,7 @@ importers:
         version: 0.18.0(synckit@0.11.12)(typescript@5.9.3)
       unplugin-dts:
         specifier: 1.0.0-beta.6
-        version: 1.0.0-beta.6(@microsoft/api-extractor@7.52.13(@types/node@25.2.3))(esbuild@0.25.12)(rollup@4.57.1)(typescript@5.9.3)(vite@8.0.0-beta.0(@types/node@25.2.3)(esbuild@0.25.12)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1))
+        version: 1.0.0-beta.6(@microsoft/api-extractor@7.52.13(@types/node@25.2.3))(esbuild@0.25.12)(rolldown@1.0.0-beta.53)(rollup@4.57.1)(typescript@5.9.3)(vite@8.0.0-beta.0(@types/node@25.2.3)(esbuild@0.25.12)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1))
       vite:
         specifier: 8.0.0-beta.0
         version: 8.0.0-beta.0(@types/node@25.2.3)(esbuild@0.25.12)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
@@ -22138,7 +22163,7 @@ snapshots:
       magic-string-ast: 1.0.3
       unplugin: 3.0.0
 
-  unplugin-dts@1.0.0-beta.6(@microsoft/api-extractor@7.52.13(@types/node@25.2.3))(esbuild@0.25.12)(rollup@4.57.1)(typescript@5.9.3)(vite@8.0.0-beta.0(@types/node@25.2.3)(esbuild@0.25.12)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)):
+  unplugin-dts@1.0.0-beta.6(@microsoft/api-extractor@7.52.13(@types/node@25.2.3))(esbuild@0.25.12)(rolldown@1.0.0-beta.53)(rollup@4.57.1)(typescript@5.9.3)(vite@8.0.0-beta.0(@types/node@25.2.3)(esbuild@0.25.12)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)):
     dependencies:
       '@rollup/pluginutils': 5.3.0(rollup@4.57.1)
       '@volar/typescript': 2.4.23
@@ -22152,6 +22177,7 @@ snapshots:
     optionalDependencies:
       '@microsoft/api-extractor': 7.52.13(@types/node@25.2.3)
       esbuild: 0.25.12
+      rolldown: 1.0.0-beta.53
       rollup: 4.57.1
       vite: 8.0.0-beta.0(@types/node@25.2.3)(esbuild@0.25.12)(jiti@2.6.1)(terser@5.46.1)(tsx@4.21.0)(yaml@2.8.1)
     transitivePeerDependencies:

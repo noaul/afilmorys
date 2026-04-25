@@ -15,6 +15,7 @@ import { LivePhotoBadge } from '~/modules/media/LivePhotoBadge'
 import { LivePhotoVideo } from '~/modules/media/LivePhotoVideo'
 
 import { DOMImageViewer } from './DOMImageViewer'
+import { getProgressiveImageVisualReady, isThumbnailElementVisuallyReady } from './entry-animation-state'
 import {
   createContextMenuItems,
   useImageLoader,
@@ -38,6 +39,8 @@ export const ProgressiveImage = ({
   onProgress,
   onZoomChange,
   onBlobSrcChange,
+  onVisualReadyChange,
+  disableThumbnailTransition = false,
   enableZoom = true,
   enablePan = true,
   maxZoom = 20,
@@ -124,10 +127,12 @@ export const ProgressiveImage = ({
     const thumbnailElement = thumbnailRef.current
     const isAlreadyLoaded =
       loadedThumbnailSrcSet.has(thumbnailSrc) ||
-      (thumbnailElement?.currentSrc?.includes(thumbnailSrc) &&
-        thumbnailElement.complete &&
-        thumbnailElement.naturalWidth > 0) ||
-      (thumbnailElement?.src === thumbnailSrc && thumbnailElement.complete && thumbnailElement.naturalWidth > 0)
+      isThumbnailElementVisuallyReady({
+        currentSrc: thumbnailElement?.currentSrc,
+        naturalWidth: thumbnailElement?.naturalWidth,
+        src: thumbnailElement?.src,
+        thumbnailSrc,
+      })
 
     if (isAlreadyLoaded) {
       loadedThumbnailSrcSet.add(thumbnailSrc)
@@ -169,6 +174,16 @@ export const ProgressiveImage = ({
     [enablePan],
   )
 
+  const isVisualReady = getProgressiveImageVisualReady({
+    isHighResImageRendered,
+    isThumbnailLoaded,
+    thumbnailSrc,
+  })
+
+  useLayoutEffect(() => {
+    onVisualReadyChange?.(isVisualReady)
+  }, [isVisualReady, onVisualReadyChange])
+
   return (
     <div
       className={clsxm('relative overflow-hidden', className)}
@@ -187,6 +202,7 @@ export const ProgressiveImage = ({
           alt={alt}
           className={clsxm(
             'absolute inset-0 h-full w-full object-contain transition-opacity duration-300',
+            disableThumbnailTransition && 'transition-none',
             isThumbnailLoaded ? 'opacity-100' : 'opacity-0',
           )}
           onLoad={handleThumbnailLoad}

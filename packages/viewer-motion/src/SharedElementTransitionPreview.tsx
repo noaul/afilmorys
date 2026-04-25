@@ -1,26 +1,29 @@
-import { Thumbhash } from '@afilmory/ui'
 import { animate, m, useMotionValue } from 'motion/react'
+import type { ReactNode } from 'react'
 import { useEffect, useRef } from 'react'
 
-import type { PhotoViewerTransition } from './types'
+import type { ViewerTransition } from './types'
 
-interface PhotoViewerTransitionPreviewProps {
-  transition: PhotoViewerTransition
-  onReady?: () => void
+interface SharedElementTransitionPreviewProps {
   onComplete: () => void
+  onReady?: () => void
+  renderPlaceholder?: (thumbHash: string) => ReactNode
+  transition: ViewerTransition
 }
 
-export const PhotoViewerTransitionPreview = ({
+export const SharedElementTransitionPreview = ({
   transition,
   onReady,
   onComplete,
-}: PhotoViewerTransitionPreviewProps) => {
+  renderPlaceholder,
+}: SharedElementTransitionPreviewProps) => {
   const baseTransition = {
     duration: 0.42,
     ease: [0.22, 1, 0.36, 1] as const,
   }
+  const entryHandoffLead = 0.1
   const entryFadeOutTransition = {
-    duration: 0.22,
+    duration: 0.1,
     ease: [0.32, 0.72, 0, 1] as const,
   }
   const thumbHash = typeof transition.thumbHash === 'string' ? transition.thumbHash : null
@@ -33,11 +36,16 @@ export const PhotoViewerTransitionPreview = ({
   const opacity = useMotionValue(1)
   const hasReadyRef = useRef(false)
   const hasCompletedRef = useRef(false)
+  const transformOrigin =
+    transition.variant === 'exit'
+      ? (transition.from.transformOrigin ?? transition.to.transformOrigin ?? '50% 50%')
+      : (transition.to.transformOrigin ?? transition.from.transformOrigin ?? '50% 50%')
 
   useEffect(() => {
     opacity.set(1)
     hasReadyRef.current = false
     hasCompletedRef.current = false
+    let readyTimer: number | null = null
 
     const complete = () => {
       if (hasCompletedRef.current) return
@@ -74,7 +82,14 @@ export const PhotoViewerTransitionPreview = ({
       animate(rotate, transition.to.rotate, baseTransition),
     ]
 
+    if (transition.variant === 'entry') {
+      readyTimer = window.setTimeout(ready, Math.max(0, (baseTransition.duration - entryHandoffLead) * 1000))
+    }
+
     return () => {
+      if (readyTimer) {
+        window.clearTimeout(readyTimer)
+      }
       animations.forEach((animation) => animation.stop())
     }
   }, [
@@ -98,9 +113,13 @@ export const PhotoViewerTransitionPreview = ({
 
   return (
     <m.div
-      className="pointer-events-none fixed top-0 left-0 z-[60]"
-      data-variant={`photo-viewer-transition-${transition.variant}`}
+      data-viewer-transition-variant={transition.variant}
       style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        zIndex: 60,
+        pointerEvents: 'none',
         x,
         y,
         width,
@@ -108,18 +127,32 @@ export const PhotoViewerTransitionPreview = ({
         borderRadius,
         opacity,
         rotate,
-        transformOrigin: '50% 50%',
+        transformOrigin,
       }}
     >
-      <div className="relative h-full w-full overflow-hidden bg-black">
-        {thumbHash && (
-          <Thumbhash thumbHash={thumbHash} className="pointer-events-none absolute inset-0 h-full w-full" />
-        )}
+      <div
+        style={{
+          position: 'relative',
+          width: '100%',
+          height: '100%',
+          overflow: 'hidden',
+          background: 'black',
+        }}
+      >
+        {thumbHash && renderPlaceholder ? (
+          <div style={{ position: 'absolute', inset: 0 }}>{renderPlaceholder(thumbHash)}</div>
+        ) : null}
         <img
           src={transition.imageSrc}
           alt=""
-          className="absolute inset-0 h-full w-full object-cover"
           draggable={false}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+          }}
         />
       </div>
     </m.div>

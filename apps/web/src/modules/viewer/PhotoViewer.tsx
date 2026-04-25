@@ -5,6 +5,17 @@ import 'swiper/css/navigation'
 
 import { Thumbhash } from '@afilmory/ui'
 import { Spring } from '@afilmory/utils'
+import {
+  type AnimationFrameRect,
+  createInspectorSheetPresentation,
+  DEFAULT_MOBILE_VIEWER_MEDIA_TRANSFORM_ORIGIN,
+  type MobileViewerDismissSnapshot,
+  projectDismissedViewerMediaFrame,
+  resolveInspectorSheetHeight,
+  SharedElementTransitionPreview,
+  useViewerMobileInteractions,
+  useViewerTransitions,
+} from '@afilmory/viewer-motion'
 import { AnimatePresence, m } from 'motion/react'
 import { Fragment, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -20,15 +31,10 @@ import { ShareModal } from '~/modules/social/ShareModal'
 import type { PhotoManifest } from '~/types/photo'
 
 import { ReactionRail } from '../social'
-import { PhotoViewerTransitionPreview } from './animations/PhotoViewerTransitionPreview'
-import type { AnimationFrameRect } from './animations/types'
-import { usePhotoViewerTransitions } from './animations/usePhotoViewerTransitions'
-import { computeViewerImageFrame, projectViewerImageFrame } from './animations/utils'
+import { resolvePhotoViewerEntryState, shouldHideCurrentViewerImage } from './entry-animation-state'
 import { GalleryThumbnail } from './GalleryThumbnail'
 import { MobilePhotoInspectorSheet } from './MobilePhotoInspectorSheet'
 import { ProgressiveImage } from './ProgressiveImage'
-import type { MobilePhotoViewerDismissSnapshot } from './usePhotoViewerMobileInteractions'
-import { usePhotoViewerMobileInteractions } from './usePhotoViewerMobileInteractions'
 
 interface PhotoViewerProps {
   photos: PhotoManifest[]
@@ -40,6 +46,12 @@ interface PhotoViewerProps {
   triggerElement: HTMLElement | null
   onExitComplete?: () => void
 }
+
+const AFILMORY_VIEWER_FRAME_LAYOUT = {
+  desktopSidebarWidthRem: 20,
+  desktopThumbnailStripHeight: 64,
+  mobileThumbnailStripHeight: 48,
+} as const
 
 export const PhotoViewer = ({
   photos,
@@ -55,6 +67,7 @@ export const PhotoViewer = ({
   const isMobile = useMobile()
   const swiperRef = useRef<SwiperType | null>(null)
   const [isImageZoomed, setIsImageZoomed] = useState(false)
+  const [isCurrentImageVisualReady, setIsCurrentImageVisualReady] = useState(false)
   const [isDesktopInspectorVisible, setIsDesktopInspectorVisible] = useState(!isMobile)
   const [currentBlobSrc, setCurrentBlobSrc] = useState<string | null>(null)
   const [dragDismissExitFrame, setDragDismissExitFrame] = useState<AnimationFrameRect | null>(null)
@@ -64,6 +77,7 @@ export const PhotoViewer = ({
     containerRef,
     entryTransition,
     exitTransition,
+    hasTransitionTrigger,
     isViewerContentVisible,
     isEntryAnimating,
     shouldRenderBackdrop,
@@ -72,12 +86,22 @@ export const PhotoViewer = ({
     handleEntryTransitionReady,
     handleEntryTransitionComplete,
     handleExitAnimationComplete,
-  } = usePhotoViewerTransitions({
+  } = useViewerTransitions({
     exitOverrideFrame: dragDismissExitFrame,
     isOpen,
+    layout: AFILMORY_VIEWER_FRAME_LAYOUT,
     triggerElement,
-    currentPhoto,
-    currentBlobSrc,
+    currentItem: currentPhoto
+      ? {
+          id: currentPhoto.id,
+          width: currentPhoto.width,
+          height: currentPhoto.height,
+          previewSrc: currentPhoto.thumbnailUrl,
+          fullSrc: currentPhoto.originalUrl,
+          thumbHash: currentPhoto.thumbHash,
+        }
+      : undefined,
+    currentDisplaySrc: currentBlobSrc,
     isMobile,
     onExitComplete,
   })
@@ -88,7 +112,7 @@ export const PhotoViewer = ({
   }, [onClose])
 
   const handleDragDismiss = useCallback(
-    (snapshot: MobilePhotoViewerDismissSnapshot) => {
+    (snapshot: MobileViewerDismissSnapshot) => {
       if (!currentPhoto) {
         handleCloseRequest()
         return
@@ -96,8 +120,16 @@ export const PhotoViewer = ({
 
       const viewportRect =
         containerRef.current?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight)
-      const baseFrame = computeViewerImageFrame(currentPhoto, viewportRect, true)
-      const projectedFrame = projectViewerImageFrame(baseFrame, viewportRect, snapshot)
+      const projectedFrame = projectDismissedViewerMediaFrame({
+        item: {
+          width: currentPhoto.width,
+          height: currentPhoto.height,
+        },
+        layout: AFILMORY_VIEWER_FRAME_LAYOUT,
+        viewportRect,
+        snapshot,
+        isMobile: true,
+      })
 
       setDragDismissExitFrame(projectedFrame)
       onDragDismiss?.(projectedFrame)
@@ -126,7 +158,7 @@ export const PhotoViewer = ({
     backdropOpacity,
     chromeOpacity,
     chromeY,
-  } = usePhotoViewerMobileInteractions({
+  } = useViewerMobileInteractions({
     enabled: isMobile && isOpen,
     isImageZoomed,
     onDismiss: handleDragDismiss,
@@ -140,6 +172,23 @@ export const PhotoViewer = ({
       setDragDismissExitFrame(null)
     }
   }, [isOpen])
+
+  useEffect(() => {
+    if (!isOpen) {
+      setIsCurrentImageVisualReady(false)
+      return
+    }
+
+    if (!hasTransitionTrigger) {
+      setIsCurrentImageVisualReady(true)
+    }
+  }, [hasTransitionTrigger, isOpen])
+
+  useEffect(() => {
+    if (entryTransition?.variant === 'entry') {
+      setIsCurrentImageVisualReady(false)
+    }
+  }, [entryTransition])
 
   useEffect(() => {
     if (!isOpen) {
@@ -209,6 +258,15 @@ export const PhotoViewer = ({
     }
   }, [closeInspector, isImageZoomed, isInspectorVisible, isMobile])
 
+  const currentThumbHash = transitionThumbHash
+  const { shouldMountImageStage, shouldShowEntryImageCatchup } = resolvePhotoViewerEntryState({
+    hasTransitionTrigger,
+    isCurrentImageVisualReady,
+    isEntryTransitionActive: entryTransition?.variant === 'entry',
+    isOpen,
+    isViewerContentVisible,
+  })
+
   // 键盘导航
   useEffect(() => {
     if (!isOpen) return
@@ -239,9 +297,13 @@ export const PhotoViewer = ({
     }
   }, [isOpen, handleCloseRequest, handlePrevious, handleNext])
 
-  if (!currentPhoto) return null
+  useEffect(() => {
+    if (!shouldMountImageStage) {
+      swiperRef.current = null
+    }
+  }, [shouldMountImageStage])
 
-  const currentThumbHash = transitionThumbHash
+  if (!currentPhoto) return null
 
   return (
     <>
@@ -305,7 +367,7 @@ export const PhotoViewer = ({
                           scale: viewerScale,
                           rotate: viewerRotate,
                           borderRadius: viewerBorderRadius,
-                          transformOrigin: '50% 18%',
+                          transformOrigin: DEFAULT_MOBILE_VIEWER_MEDIA_TRANSFORM_ORIGIN,
                           touchAction: 'none',
                         }
                       : undefined
@@ -386,88 +448,130 @@ export const PhotoViewer = ({
                     <LoadingIndicator ref={loadingIndicatorRef} />
                     <div
                       className="relative flex h-full w-full items-center justify-center"
+                      data-photo-viewer-stage="true"
                       style={{
                         touchAction: isMobile ? 'pan-x pinch-zoom' : 'pan-y',
                       }}
                     >
-                      {/* Swiper 容器 */}
-                      <Swiper
-                        modules={[Navigation, Virtual]}
-                        spaceBetween={0}
-                        slidesPerView={1}
-                        initialSlide={currentIndex}
-                        virtual
-                        onSwiper={(swiper) => {
-                          swiperRef.current = swiper
-                          swiper.allowTouchMove =
-                            !isImageZoomed && !(isMobile && (isVerticalGestureActive || isInspectorVisible))
-                        }}
-                        onSlideChange={(swiper) => {
-                          onIndexChange(swiper.activeIndex)
-                        }}
-                        className="h-full w-full"
-                        style={{ touchAction: isMobile ? 'pan-x' : 'pan-y' }}
-                      >
-                        {photos.map((photo, index) => {
-                          const isCurrentImage = index === currentIndex
-                          const hideCurrentImage = isCurrentImage && isEntryAnimating && !isViewerContentVisible
-                          return (
-                            <SwiperSlide
-                              key={photo.id}
-                              className="flex items-center justify-center"
-                              virtualIndex={index}
-                            >
-                              <ReactionRail photoId={photo.id} />
-                              <m.div
-                                initial={{ opacity: 0.5, scale: 0.95 }}
-                                animate={{ opacity: 1, scale: 1 }}
-                                exit={{ opacity: 0, scale: 0.95 }}
-                                transition={Spring.presets.smooth}
-                                className="relative flex h-full w-full items-center justify-center"
-                                style={{
-                                  visibility: hideCurrentImage ? 'hidden' : 'visible',
-                                }}
+                      {shouldShowEntryImageCatchup && (
+                        <div
+                          className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center transition-opacity duration-150"
+                          data-photo-viewer-entry-catchup="true"
+                        >
+                          <div className="relative h-full w-full">
+                            {currentThumbHash && (
+                              <Thumbhash
+                                thumbHash={currentThumbHash}
+                                className="pointer-events-none absolute inset-0"
+                              />
+                            )}
+                            <img
+                              src={currentPhoto.thumbnailUrl || currentPhoto.originalUrl}
+                              alt=""
+                              className="absolute inset-0 h-full w-full object-contain"
+                              draggable={false}
+                            />
+                          </div>
+                        </div>
+                      )}
+
+                      {shouldMountImageStage ? (
+                        <Swiper
+                          modules={[Navigation, Virtual]}
+                          spaceBetween={0}
+                          slidesPerView={1}
+                          initialSlide={currentIndex}
+                          virtual
+                          onSwiper={(swiper) => {
+                            swiperRef.current = swiper
+                            swiper.allowTouchMove =
+                              !isImageZoomed && !(isMobile && (isVerticalGestureActive || isInspectorVisible))
+                          }}
+                          onSlideChange={(swiper) => {
+                            onIndexChange(swiper.activeIndex)
+                          }}
+                          className="h-full w-full"
+                          style={{ touchAction: isMobile ? 'pan-x' : 'pan-y' }}
+                        >
+                          {photos.map((photo, index) => {
+                            const isCurrentImage = index === currentIndex
+                            const hideCurrentImage = shouldHideCurrentViewerImage({
+                              isCurrentImage,
+                              isEntryImageCatchupVisible: shouldShowEntryImageCatchup,
+                            })
+                            return (
+                              <SwiperSlide
+                                key={photo.id}
+                                className="flex items-center justify-center"
+                                virtualIndex={index}
                               >
-                                <ProgressiveImage
-                                  loadingIndicatorRef={loadingIndicatorRef}
-                                  isCurrentImage={isCurrentImage}
-                                  src={photo.originalUrl}
-                                  thumbnailSrc={photo.thumbnailUrl}
-                                  alt={photo.title}
-                                  width={isCurrentImage ? currentPhoto.width : undefined}
-                                  height={isCurrentImage ? currentPhoto.height : undefined}
-                                  className="h-full w-full object-contain"
-                                  enablePan={isCurrentImage ? !isMobile || isImageZoomed : true}
-                                  enableZoom={true}
-                                  shouldRenderHighRes={isViewerContentVisible && isOpen}
-                                  onZoomChange={isCurrentImage ? handleZoomChange : undefined}
-                                  onBlobSrcChange={isCurrentImage ? handleBlobSrcChange : undefined}
-                                  // Video source (Live Photo or Motion Photo)
-                                  videoSource={
-                                    photo.video?.type === 'motion-photo'
-                                      ? {
-                                          type: 'motion-photo',
-                                          imageUrl: photo.originalUrl,
-                                          offset: photo.video.offset,
-                                          size: photo.video.size,
-                                          presentationTimestamp: photo.video.presentationTimestamp,
-                                        }
-                                      : photo.video?.type === 'live-photo'
-                                        ? {
-                                            type: 'live-photo',
-                                            videoUrl: photo.video.videoUrl,
-                                          }
-                                        : { type: 'none' }
+                                <ReactionRail photoId={photo.id} />
+                                <m.div
+                                  initial={
+                                    isCurrentImage && entryTransition?.variant === 'entry'
+                                      ? false
+                                      : { opacity: 0.5, scale: 0.95 }
                                   }
-                                  shouldAutoPlayVideoOnce={isCurrentImage}
-                                  // HDR props
-                                  isHDR={photo.isHDR}
-                                />
-                              </m.div>
-                            </SwiperSlide>
-                          )
-                        })}
-                      </Swiper>
+                                  animate={
+                                    isCurrentImage && entryTransition?.variant === 'entry'
+                                      ? undefined
+                                      : { opacity: 1, scale: 1 }
+                                  }
+                                  exit={{ opacity: 0, scale: 0.95 }}
+                                  transition={
+                                    isCurrentImage && entryTransition?.variant === 'entry'
+                                      ? undefined
+                                      : Spring.presets.smooth
+                                  }
+                                  className="relative flex h-full w-full items-center justify-center"
+                                  style={{
+                                    opacity: hideCurrentImage ? 0 : 1,
+                                    pointerEvents: hideCurrentImage ? 'none' : undefined,
+                                  }}
+                                >
+                                  <ProgressiveImage
+                                    loadingIndicatorRef={loadingIndicatorRef}
+                                    isCurrentImage={isCurrentImage}
+                                    src={photo.originalUrl}
+                                    thumbnailSrc={photo.thumbnailUrl}
+                                    alt={photo.title}
+                                    width={isCurrentImage ? currentPhoto.width : undefined}
+                                    height={isCurrentImage ? currentPhoto.height : undefined}
+                                    className="h-full w-full object-contain"
+                                    enablePan={isCurrentImage ? !isMobile || isImageZoomed : true}
+                                    enableZoom={true}
+                                    shouldRenderHighRes={isCurrentImage && isViewerContentVisible && isOpen}
+                                    onZoomChange={isCurrentImage ? handleZoomChange : undefined}
+                                    onBlobSrcChange={isCurrentImage ? handleBlobSrcChange : undefined}
+                                    onVisualReadyChange={isCurrentImage ? setIsCurrentImageVisualReady : undefined}
+                                    disableThumbnailTransition={isCurrentImage && entryTransition?.variant === 'entry'}
+                                    videoSource={
+                                      photo.video?.type === 'motion-photo'
+                                        ? {
+                                            type: 'motion-photo',
+                                            imageUrl: photo.originalUrl,
+                                            offset: photo.video.offset,
+                                            size: photo.video.size,
+                                            presentationTimestamp: photo.video.presentationTimestamp,
+                                          }
+                                        : photo.video?.type === 'live-photo'
+                                          ? {
+                                              type: 'live-photo',
+                                              videoUrl: photo.video.videoUrl,
+                                            }
+                                          : { type: 'none' }
+                                    }
+                                    shouldAutoPlayVideoOnce={isCurrentImage}
+                                    isHDR={photo.isHDR}
+                                  />
+                                </m.div>
+                              </SwiperSlide>
+                            )
+                          })}
+                        </Swiper>
+                      ) : (
+                        <div className="h-full w-full" />
+                      )}
 
                       {isMobile && (
                         <m.div
@@ -529,9 +633,12 @@ export const PhotoViewer = ({
               <Suspense>
                 {isMobile ? (
                   <MobilePhotoInspectorSheet
+                    createPresentation={createInspectorSheetPresentation}
                     currentPhoto={currentPhoto}
                     exifData={currentPhoto.exif}
+                    isInteractive={isMobileInspectorVisible}
                     progress={inspectorProgress}
+                    resolveHeight={resolveInspectorSheetHeight}
                     onClose={closeInspector}
                   />
                 ) : (
@@ -550,18 +657,24 @@ export const PhotoViewer = ({
         )}
       </AnimatePresence>
       {entryTransition && (
-        <PhotoViewerTransitionPreview
-          key={`${entryTransition.variant}-${entryTransition.photoId}`}
+        <SharedElementTransitionPreview
+          key={`${entryTransition.variant}-${entryTransition.itemId}`}
           transition={entryTransition}
           onReady={handleEntryTransitionReady}
           onComplete={handleEntryTransitionComplete}
+          renderPlaceholder={(thumbHash) => (
+            <Thumbhash thumbHash={thumbHash} className="pointer-events-none absolute inset-0 h-full w-full" />
+          )}
         />
       )}
       {exitTransition && (
-        <PhotoViewerTransitionPreview
-          key={`${exitTransition.variant}-${exitTransition.photoId}`}
+        <SharedElementTransitionPreview
+          key={`${exitTransition.variant}-${exitTransition.itemId}`}
           transition={exitTransition}
           onComplete={handleExitAnimationComplete}
+          renderPlaceholder={(thumbHash) => (
+            <Thumbhash thumbHash={thumbHash} className="pointer-events-none absolute inset-0 h-full w-full" />
+          )}
         />
       )}
     </>
