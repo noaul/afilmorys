@@ -1,6 +1,8 @@
 import { resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { getTenantContext } from '@core/modules/platform/tenant/tenant.context'
+import { ROOT_TENANT_SLUG } from '@core/modules/platform/tenant/tenant.constants'
 import { injectable } from 'tsyringe'
 
 import type { StaticAssetDocument } from './static-asset.service'
@@ -59,16 +61,20 @@ export class StaticDashboardService extends StaticAssetService {
       return
     }
 
+    const tenantContext = getTenantContext()
+    const isRootTenant = tenantContext?.tenant?.slug === ROOT_TENANT_SLUG
+    const basename = isRootTenant ? '/' : STATIC_DASHBOARD_BASENAME
+
     const existing = document.querySelector<HTMLScriptElement>('#afilmory-dashboard-basename')
     if (existing) {
-      existing.textContent = `window.__AFILMORY_DASHBOARD_BASENAME__ = ${JSON.stringify(STATIC_DASHBOARD_BASENAME)};`
+      existing.textContent = `window.__AFILMORY_DASHBOARD_BASENAME__ = ${JSON.stringify(basename)};`
       return
     }
 
     const script = document.createElement('script')
     script.type = 'text/javascript'
     script.id = 'afilmory-dashboard-basename'
-    script.textContent = `window.__AFILMORY_DASHBOARD_BASENAME__ = ${JSON.stringify(STATIC_DASHBOARD_BASENAME)};`
+    script.textContent = `window.__AFILMORY_DASHBOARD_BASENAME__ = ${JSON.stringify(basename)};`
     head.append(script)
   }
 }

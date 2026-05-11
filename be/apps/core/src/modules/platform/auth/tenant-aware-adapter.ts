@@ -1,4 +1,3 @@
-import { BizException, ErrorCode } from '@core/errors'
 import { HttpContext } from '@tsuki-hono/common'
 import type { Adapter, Where } from 'better-auth'
 import { drizzleAdapter } from 'better-auth/adapters/drizzle'
@@ -72,9 +71,7 @@ async function injectTenantFilterForFindOne(
   if (!tenantId) {
     // No tenant context - allow query to proceed without tenant filter
     // This handles edge cases like initial setup or cross-tenant admin operations
-    throw new BizException(ErrorCode.TENANT_NOT_FOUND, {
-      message: 'Tenant Id is required',
-    })
+    return params
   }
 
   const tenantFilter: Where = {

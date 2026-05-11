@@ -17,6 +17,9 @@ export class StaticAssetController extends StaticBaseController {
   @AllowPlaceholderTenant()
   @Get('/*')
   async getAsset(@ContextParam() context: Context) {
+    if (this.isRootTenant()) {
+      return await this.serve(context, this.staticDashboardService, false)
+    }
     return await this.handleAssetRequest(context, false)
   }
 }
