@@ -44,6 +44,10 @@ export abstract class StaticBaseController {
       return pathname
     }
 
+    if (this.isRootTenant() && !this.isDashboardBasename(pathname) && !this.isLegacyDashboardPath(pathname)) {
+      return `${STATIC_DASHBOARD_BASENAME}${pathname === '/' ? '' : pathname}`
+    }
+
     if (this.isDashboardBasename(pathname)) {
       return pathname
     }
