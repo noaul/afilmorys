@@ -182,23 +182,8 @@ export function usePageRedirect() {
     }
 
     const currentSlug = getTenantSlugFromHost(window.location.hostname)
-    if (currentSlug && currentSlug === tenant.slug) {
+    if (!currentSlug || currentSlug === tenant.slug) {
       return
-    }
-
-    try {
-      const targetUrl = buildTenantUrl(tenant.slug, '/')
-      ;(async () => {
-        try {
-          await signOutBySource()
-        } catch (error) {
-          console.error('Failed to clear placeholder session before redirect', error)
-        } finally {
-          window.location.replace(targetUrl)
-        }
-      })()
-    } catch (error) {
-      console.error('Failed to redirect to tenant workspace', error)
     }
   }, [sessionQuery.data, sessionQuery.isPending])
 

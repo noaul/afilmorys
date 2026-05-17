@@ -1,4 +1,4 @@
-import { photoAssets } from '@afilmory/db'
+import { authUsers, photoAssets, tenantDomains } from '@afilmory/db'
 import { DbAccessor } from '@core/database/database.provider'
 import { Roles } from '@core/guards/roles.decorator'
 import { BypassResponseTransform } from '@core/interceptors/response-transform.decorator'
@@ -72,17 +72,22 @@ export class SuperAdminTenantController {
     const { items: tenantAggregates, total } = tenantResult
 
     const tenantIds = tenantAggregates.map((aggregate) => aggregate.tenant.id)
-    const usageTotalsMap = await this.billingUsageService.getUsageTotalsForTenants(tenantIds)
-    const storageUsageMap =
+    const [usageTotalsMap, storageUsageMap, ownerMap, domainMap] = await Promise.all([
+      this.billingUsageService.getUsageTotalsForTenants(tenantIds),
       managedProviderKey && tenantIds.length > 0
-        ? await this.managedStorageService.getUsageTotalsForTenants(managedProviderKey, tenantIds)
-        : {}
+        ? this.managedStorageService.getUsageTotalsForTenants(managedProviderKey, tenantIds)
+        : Promise.resolve({}),
+      this.getOwnerEmailsForTenants(tenantIds),
+      this.getVerifiedDomainsForTenants(tenantIds),
+    ])
 
     return {
       tenants: tenantAggregates.map((aggregate) => ({
         ...aggregate.tenant,
         usageTotals: usageTotalsMap[aggregate.tenant.id] ?? [],
         storageUsage: storageUsageMap[aggregate.tenant.id] ?? null,
+        ownerEmail: ownerMap[aggregate.tenant.id] ?? null,
+        customDomain: domainMap[aggregate.tenant.id] ?? null,
       })),
       plans,
       storagePlans: Object.entries(storagePlanCatalog).map(([id, def]) => ({
@@ -152,5 +157,37 @@ export class SuperAdminTenantController {
   @Delete('/:tenantId')
   async deleteTenant(@Param() params: TenantIdParamDto) {
     return await this.dataManagementService.deleteTenantAccountById(params.tenantId)
+  }
+
+  private async getOwnerEmailsForTenants(tenantIds: string[]): Promise<Record<string, string>> {
+    if (tenantIds.length === 0) return {}
+    const db = this.db.get()
+    const rows = await db
+      .select({ tenantId: authUsers.tenantId, email: authUsers.email })
+      .from(authUsers)
+      .where(eq(authUsers.role, 'admin'))
+    const map: Record<string, string> = {}
+    for (const row of rows) {
+      if (row.tenantId && !map[row.tenantId]) {
+        map[row.tenantId] = row.email
+      }
+    }
+    return map
+  }
+
+  private async getVerifiedDomainsForTenants(tenantIds: string[]): Promise<Record<string, string>> {
+    if (tenantIds.length === 0) return {}
+    const db = this.db.get()
+    const rows = await db
+      .select({ tenantId: tenantDomains.tenantId, domain: tenantDomains.domain })
+      .from(tenantDomains)
+      .where(eq(tenantDomains.status, 'verified'))
+    const map: Record<string, string> = {}
+    for (const row of rows) {
+      if (!map[row.tenantId]) {
+        map[row.tenantId] = row.domain
+      }
+    }
+    return map
   }
 }

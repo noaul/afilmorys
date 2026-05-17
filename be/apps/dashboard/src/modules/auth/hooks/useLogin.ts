@@ -63,7 +63,7 @@ export function useLogin() {
 
       if (tenant && tenant.slug) {
         const currentSlug = getTenantSlugFromHost(window.location.hostname)
-        if (!isSuperAdmin && tenant.slug !== currentSlug) {
+        if (!isSuperAdmin && currentSlug && tenant.slug !== currentSlug) {
           try {
             const targetUrl = buildTenantUrl(tenant.slug, '/')
             window.location.replace(targetUrl)

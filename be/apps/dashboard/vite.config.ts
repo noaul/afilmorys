@@ -19,7 +19,7 @@ const ROOT = fileURLToPath(new URL('./', import.meta.url))
 const isSaas = process.env.SAAS === '1'
 
 export default defineConfig({
-  base: isSaas ? 'https://static.afilmory.art/platform/' : '/',
+  base: isSaas ? '/platform/' : '/',
   plugins: [
     codeInspectorPlugin({
       bundler: 'vite',

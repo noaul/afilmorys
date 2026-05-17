@@ -23,6 +23,8 @@ export const env = createEnv({
 
     CONFIG_ENCRYPTION_KEY: z.string().min(1),
     AUTH_GATEWAY_STATE_SECRET: z.string().min(1).optional(),
+    BETTER_AUTH_SECRET: z.string().min(1).optional(),
+    AUTH_ALLOWED_EMAILS: z.string().min(1).optional(),
 
     // Payment
     CREEM_API_KEY: z.string().min(1).optional(),

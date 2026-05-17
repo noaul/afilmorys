@@ -55,7 +55,7 @@ export function useRegisterTenant() {
     },
     onSuccess: ({ slug }) => {
       try {
-        const loginUrl = buildTenantUrl(slug, '/platform/login')
+        const loginUrl = buildTenantUrl(slug, '/login')
         setErrorMessage(null)
         window.location.replace(loginUrl)
       } catch (redirectError) {

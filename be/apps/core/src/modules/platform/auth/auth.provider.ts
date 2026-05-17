@@ -189,6 +189,7 @@ export class AuthProvider implements OnModuleInit {
         },
         ensureTenantId,
       ),
+      secret: env.BETTER_AUTH_SECRET ?? env.CONFIG_ENCRYPTION_KEY,
       socialProviders: socialProviders as any,
       emailAndPassword: { enabled: true },
       trustedOrigins: await this.buildTrustedOrigins(),
@@ -216,16 +217,11 @@ export class AuthProvider implements OnModuleInit {
           create: {
             before: async (user) => {
               const tenantId = explicitTenantId ?? (await ensureTenantId())
-              if (!tenantId) {
-                throw new APIError('BAD_REQUEST', {
-                  message: 'Missing tenant context during account creation.',
-                })
-              }
 
               return {
                 data: {
                   ...user,
-                  tenantId,
+                  tenantId: tenantId ?? null,
                   role: user.role ?? 'user',
                 },
               }

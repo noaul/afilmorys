@@ -1,7 +1,7 @@
 import { TextDecoder } from 'node:util'
 
 import { decodeGatewayState, encodeGatewayState } from '@afilmory/be-utils'
-import { authUsers } from '@afilmory/db'
+import { authAccounts, authSessions, authUsers, tenantDomains, tenants } from '@afilmory/db'
 import { env } from '@afilmory/env'
 import { DbAccessor } from '@core/database/database.provider'
 import { AllowPlaceholderTenant } from '@core/decorators/allow-placeholder.decorator'
@@ -12,12 +12,13 @@ import { BypassResponseTransform } from '@core/interceptors/response-transform.d
 import { SystemSettingService } from '@core/modules/configuration/system-setting/system-setting.service'
 import { Body, ContextParam, Controller, Get, HttpContext, Post } from '@tsuki-hono/common'
 import { freshSessionMiddleware } from 'better-auth/api'
-import { eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 
 import { getTenantContext, isPlaceholderTenantContext } from '../tenant/tenant.context'
 import { TenantService } from '../tenant/tenant.service'
 import type { TenantRecord } from '../tenant/tenant.types'
+import { isEmailAllowed, parseAllowedEmails } from './auth-allowlist'
 import type { SocialProvidersConfig } from './auth.config'
 import { AuthProvider } from './auth.provider'
 import { AuthRegistrationService } from './auth-registration.service'
@@ -115,6 +116,7 @@ export class AuthController {
     private readonly tenantService: TenantService,
   ) {}
   private readonly gatewayStateSecret = env.AUTH_GATEWAY_STATE_SECRET ?? env.CONFIG_ENCRYPTION_KEY
+  private readonly allowedEmails = parseAllowedEmails(env.AUTH_ALLOWED_EMAILS)
 
   @AllowPlaceholderTenant()
   @Get('/session')
@@ -327,6 +329,7 @@ export class AuthController {
     return response
   }
 
+  @SkipTenantGuard()
   @AllowPlaceholderTenant()
   @Post('/social')
   async signInSocial(@ContextParam() context: Context, @Body() body: SocialSignInRequest) {
@@ -334,6 +337,7 @@ export class AuthController {
   }
 
   // Compatibility for Better Auth client default path
+  @SkipTenantGuard()
   @AllowPlaceholderTenant()
   @Post('/sign-in/social')
   async signInSocialCompat(@ContextParam() context: Context, @Body() body: SocialSignInRequest) {
@@ -350,10 +354,11 @@ export class AuthController {
     const tenantContext = getTenantContext()
     const tenantSlug = tenantContext?.requestedSlug ?? tenantContext?.tenant?.slug ?? null
 
-    // Only allow auto sign-up on real tenants (not placeholder)
+    // Allow auto sign-up on real tenants and root domain (no tenant context)
     // On placeholder tenant, users must explicitly register first
     const isRealTenant = tenantContext && !isPlaceholderTenantContext(tenantContext)
-    const shouldAllowSignUp = body.requestSignUp ?? isRealTenant
+    const isRootDomain = !tenantContext
+    const shouldAllowSignUp = body.requestSignUp ?? (isRealTenant || isRootDomain)
 
     const auth = await this.auth.getAuth()
     const response = await auth.api.signInSocial({
@@ -450,9 +455,11 @@ export class AuthController {
       }
     }
 
+    // Skip host rewrite if current host is already a custom domain for this tenant
     if (tenantSlugFromState) {
       const { hostname } = reqUrl
-      if (!hostname.startsWith(`${tenantSlugFromState}.`)) {
+      const isCustomDomain = await this.isCustomDomainForTenant(hostname, tenantSlugFromState)
+      if (!isCustomDomain && !hostname.startsWith(`${tenantSlugFromState}.`)) {
         reqUrl.hostname = `${tenantSlugFromState}.${hostname}`
         didRewriteHost = true
       }
@@ -471,7 +478,12 @@ export class AuthController {
       return context.redirect(reqUrl.toString(), 302)
     }
 
-    return await this.auth.handler(context)
+    const response = await this.auth.handler(context)
+
+    const allowlistResponse = await this.enforceAuthAllowlist(response)
+    if (allowlistResponse) return allowlistResponse
+
+    return response
   }
 
   @AllowPlaceholderTenant()
@@ -684,5 +696,68 @@ export class AuthController {
     } catch {
       return url
     }
+  }
+
+  private async isCustomDomainForTenant(hostname: string, tenantSlug: string): Promise<boolean> {
+    try {
+      const db = this.dbAccessor.get()
+      const [tenant] = await db
+        .select({ id: tenants.id })
+        .from(tenants)
+        .where(eq(tenants.slug, tenantSlug))
+        .limit(1)
+      if (!tenant) return false
+
+      const [domain] = await db
+        .select({ id: tenantDomains.id })
+        .from(tenantDomains)
+        .where(and(eq(tenantDomains.tenantId, tenant.id), eq(tenantDomains.domain, hostname)))
+        .limit(1)
+      return !!domain
+    } catch {
+      return false
+    }
+  }
+
+  private async enforceAuthAllowlist(response: Response): Promise<Response | null> {
+    if (this.allowedEmails.size === 0) {
+      return null
+    }
+
+    const setCookie = response.headers.get('set-cookie') ?? ''
+    const sessionTokenMatch = setCookie.match(/session_token=([^;]+)/)
+    if (!sessionTokenMatch) {
+      return null
+    }
+
+    const token = sessionTokenMatch[1]
+    const db = this.dbAccessor.get()
+    const [session] = await db
+      .select({ userId: authSessions.userId })
+      .from(authSessions)
+      .where(eq(authSessions.token, token))
+      .limit(1)
+
+    if (!session) {
+      return null
+    }
+
+    const [user] = await db
+      .select({ id: authUsers.id, email: authUsers.email })
+      .from(authUsers)
+      .where(eq(authUsers.id, session.userId))
+      .limit(1)
+
+    if (!user || isEmailAllowed(user.email, this.allowedEmails)) {
+      return null
+    }
+
+    await db.delete(authSessions).where(eq(authSessions.userId, user.id))
+    await db.delete(authAccounts).where(eq(authAccounts.userId, user.id))
+    await db.delete(authUsers).where(eq(authUsers.id, user.id))
+    return new Response('<html><body><h1>Access Denied</h1><p>This account is not authorized.</p></body></html>', {
+      status: 403,
+      headers: { 'content-type': 'text/html' },
+    })
   }
 }

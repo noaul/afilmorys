@@ -30,6 +30,10 @@ export class StaticWebController extends StaticBaseController {
       return await this.serveDev(context, query.dev.toString())
     }
 
+    if (this.isRootTenant()) {
+      return await this.serve(context, this.staticDashboardService, false)
+    }
+
     const tenantStateResponse = await StaticControllerUtils.ensureTenantAvailable(this.staticDashboardService)
     if (tenantStateResponse) {
       return tenantStateResponse
@@ -44,6 +48,10 @@ export class StaticWebController extends StaticBaseController {
 
   @Get('/photos/:photoId')
   async getStaticPhotoPage(@ContextParam() context: Context, @Param('photoId') photoId: string) {
+    if (this.isRootTenant()) {
+      return await this.serve(context, this.staticDashboardService, false)
+    }
+
     const tenantStateResponse = await StaticControllerUtils.ensureTenantAvailable(this.staticDashboardService)
     if (tenantStateResponse) {
       return tenantStateResponse
