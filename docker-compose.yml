@@ -9,11 +9,11 @@ services:
     ports:
       - '${APP_PORT:-1841}:1841'
     healthcheck:
-      test: ['CMD', 'wget', '-q', '--spider', 'http://localhost:1841/']
+      test: ['CMD', 'wget', '-q', '--spider', 'http://127.0.0.1:1841/']
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 30s
     restart: unless-stopped
     # 使用 1Panel 的 Docker 网络，与已有的 PostgreSQL/Redis 通信
     # 如果你的 1Panel 网络名称不同，请修改下方 networks 中的名称
