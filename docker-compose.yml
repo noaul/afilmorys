@@ -1,35 +1,4 @@
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: afilmory_db
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-afilmory}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-afilmory}
-      POSTGRES_DB: ${POSTGRES_DB:-afilmory}
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER']
-      interval: 5s
-      timeout: 5s
-      retries: 20
-      start_period: 30s
-    restart: unless-stopped
-
-  redis:
-    image: redis:7-alpine
-    container_name: afilmory_redis
-    command: ['redis-server', '--appendonly', 'yes']
-    volumes:
-      - redisdata:/data
-    healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
-      interval: 5s
-      timeout: 3s
-      retries: 30
-      start_period: 30s
-    restart: unless-stopped
-
   core:
     container_name: afilmory_core
     build:
@@ -37,11 +6,6 @@ services:
       dockerfile: Dockerfile.core
       target: runner
     env_file: .env.docker
-    depends_on:
-      db:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
     ports:
       - '${APP_PORT:-1841}:1841'
     healthcheck:
@@ -51,7 +15,11 @@ services:
       retries: 5
       start_period: 30s
     restart: unless-stopped
+    # 使用 1Panel 的 Docker 网络，与已有的 PostgreSQL/Redis 通信
+    # 如果你的 1Panel 网络名称不同，请修改下方 networks 中的名称
+    networks:
+      - 1panel-network
 
-volumes:
-  pgdata:
-  redisdata:
+networks:
+  1panel-network:
+    external: true
