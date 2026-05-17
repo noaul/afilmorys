@@ -1,5 +1,4 @@
 import { useScrollViewElement } from '@afilmory/ui'
-import { getViewerTransitionTriggerProps } from '@afilmory/viewer-motion'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -129,7 +128,7 @@ const PhotoCard = ({ photo }: { photo: PhotoManifest }) => {
         className="relative w-full shrink-0 cursor-pointer overflow-hidden lg:h-full lg:w-56"
         role="button"
         tabIndex={0}
-        {...getViewerTransitionTriggerProps(photo.id)}
+        data-photo-id={photo.id}
         style={
           // 移动端：根据宽高比计算高度
           {

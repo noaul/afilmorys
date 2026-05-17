@@ -5,8 +5,6 @@ import { jotaiStore } from '~/lib/jotai'
 // Source of truth for viewer state, synced with URL
 export interface ViewerState {
   isOpen: boolean
-  openInstanceId: number
-  pendingCloseInstanceId: number | null
   photoId: string | null
   // Internal state not synced with URL
   triggerElement: HTMLElement | null
@@ -14,8 +12,6 @@ export interface ViewerState {
 
 export const viewerAtom = atom<ViewerState>({
   isOpen: false,
-  openInstanceId: 0,
-  pendingCloseInstanceId: null,
   photoId: null,
   triggerElement: null,
 })

@@ -1,21 +1,19 @@
 {
   "compilerOptions": {
     "incremental": true,
-    "ignoreDeprecations": "6.0",
     "target": "esnext",
-    "jsx": "react-jsx",
-    "jsxImportSource": "hono/jsx",
     "emitDecoratorMetadata": true,
     "experimentalDecorators": true,
     "baseUrl": ".",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "verbatimModuleSyntax": true,
+    "types": ["node"],
     "paths": {
       "@core": ["./src"],
       "@core/*": ["./src/*"]
     },
     "resolveJsonModule": true,
-    "types": ["node"],
     "allowJs": true,
     "strict": true,
     "noImplicitAny": false,
@@ -25,8 +23,9 @@
     "sourceMap": true,
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
-    "verbatimModuleSyntax": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "jsx": "react-jsx",
+    "jsxImportSource": "hono/jsx"
   },
   "include": ["src/**/*", "*.d.ts"],
   "exclude": []
