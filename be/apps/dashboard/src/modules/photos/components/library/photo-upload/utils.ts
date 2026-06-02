@@ -2,7 +2,7 @@ import { getStorageNS } from '~/lib/ns'
 
 import type { PhotoSyncProgressStage, PhotoSyncStageTotals } from '../../../types'
 import { STAGE_ORDER } from './constants'
-import type { FileProgressEntry, ProcessingStageState } from './types'
+import type { FileProgressEntry, PreviewCache, ProcessingStageState } from './types'
 
 const RECENT_TAGS_STORAGE_KEY = getStorageNS('photo-upload-recent-tags')
 const RECENT_TAGS_LIMIT = 8
@@ -48,15 +48,79 @@ export function formatBytes(bytes: number) {
   return `${size.toFixed(size >= 10 ? 0 : 1)} ${units[exponent]}`
 }
 
-export function createFileEntries(files: File[]): FileProgressEntry[] {
-  return files.map((file, index) => ({
-    index,
-    name: file.name,
-    size: file.size,
-    status: 'pending',
-    uploadedBytes: 0,
-    progress: 0,
-  }))
+const PREVIEW_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+  'image/avif',
+])
+
+const PREVIEW_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif'])
+
+const PREVIEW_SIZE_LIMIT_BYTES = 50 * 1024 * 1024
+
+export function entryFingerprint(file: File): string {
+  return `${file.name}|${file.size}|${file.lastModified}`
+}
+
+export function shouldGeneratePreview(file: File): boolean {
+  if (file.size > PREVIEW_SIZE_LIMIT_BYTES) {
+    return false
+  }
+  const mime = file.type?.toLowerCase() ?? ''
+  if (mime) {
+    return PREVIEW_MIME_TYPES.has(mime)
+  }
+  return PREVIEW_EXTENSIONS.has(getFileExtension(file.name))
+}
+
+export function revokePreviewUrls(cache: PreviewCache, fingerprintsToRevoke?: string[]): void {
+  if (fingerprintsToRevoke === undefined) {
+    cache.forEach((url) => {
+      if (url !== null) {
+        URL.revokeObjectURL(url)
+      }
+    })
+    cache.clear()
+    return
+  }
+
+  for (const fp of fingerprintsToRevoke) {
+    const url = cache.get(fp)
+    if (url) {
+      URL.revokeObjectURL(url)
+    }
+    cache.delete(fp)
+  }
+}
+
+export function primePreviewCache(files: File[], cache: PreviewCache): void {
+  for (const file of files) {
+    const fp = entryFingerprint(file)
+    if (cache.has(fp)) {
+      continue
+    }
+    cache.set(fp, shouldGeneratePreview(file) ? URL.createObjectURL(file) : null)
+  }
+}
+
+export function createFileEntries(files: File[], cache: PreviewCache): FileProgressEntry[] {
+  return files.map((file, index) => {
+    const id = entryFingerprint(file)
+    return {
+      index,
+      id,
+      name: file.name,
+      size: file.size,
+      status: 'pending',
+      uploadedBytes: 0,
+      progress: 0,
+      previewUrl: cache.get(id) ?? null,
+    }
+  })
 }
 
 export function normalizeStageCount(value: number | null | undefined, fallback = 0): number {

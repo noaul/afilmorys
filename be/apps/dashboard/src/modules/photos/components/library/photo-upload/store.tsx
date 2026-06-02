@@ -9,7 +9,7 @@ import { presentBillingUpgradeModal, resolveBillingUpgradeCategory } from '~/mod
 import type { PhotoSyncProgressEvent } from '../../../types'
 import type { PhotoUploadRequestOptions } from '../upload.types'
 import { clearActivePhotoUploadStoreIfMatches, setActivePhotoUploadStore } from './active-store'
-import type { FileProgressEntry, ProcessingLogEntry, ProcessingState, WorkflowPhase } from './types'
+import type { FileProgressEntry, PreviewCache, ProcessingLogEntry, ProcessingState, WorkflowPhase } from './types'
 import {
   calculateTotalSize,
   calculateUploadedBytes,
@@ -18,9 +18,12 @@ import {
   createFileList,
   createStageStateFromTotals,
   deriveDirectoryFromTags,
+  entryFingerprint,
   getErrorMessage,
   normalizeStageCount,
+  primePreviewCache,
   rememberRecentTags,
+  revokePreviewUrls,
 } from './utils'
 
 export type AddFilesResult = {
@@ -49,6 +52,7 @@ type PhotoUploadStoreState = {
   reset: () => void
   closeModal: () => void
   setSelectedTags: (tags: string[]) => void
+  ensurePreviews: () => void
   cleanup: () => void
 }
 
@@ -72,7 +76,8 @@ const UPLOAD_REQUEST_TIMEOUT_MS = 600_000
 // eslint-disable-next-line react-refresh/only-export-components
 export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUploadStore {
   const { files: initialFiles, availableTags, onUpload, onClose } = params
-  const initialEntries = createFileEntries(initialFiles)
+  const previewCache: PreviewCache = new Map()
+  const initialEntries = createFileEntries(initialFiles, previewCache)
   const totalSize = calculateTotalSize(initialFiles)
   const { unmatched: unmatchedMovFiles, hasMov } = collectUnmatchedMovFiles(initialFiles)
 
@@ -259,28 +264,39 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
       processingState: null,
       processingLogs: [],
       removeEntry: (entry) => {
-        set((state) => {
-          if (state.phase !== 'review') {
-            return {}
-          }
+        const state = get()
+        if (state.phase !== 'review') {
+          return
+        }
 
-          const nextFiles = state.files.filter((_, index) => index !== entry.index)
-          if (nextFiles.length === state.files.length) {
-            return {}
-          }
-          const nextEntries = createFileEntries(nextFiles)
-          const nextTotalSize = calculateTotalSize(nextFiles)
-          const { unmatched, hasMov } = collectUnmatchedMovFiles(nextFiles)
+        const removedFile = state.files[entry.index]
+        const nextFiles = state.files.filter((_, index) => index !== entry.index)
+        if (nextFiles.length === state.files.length) {
+          return
+        }
 
-          return {
-            files: nextFiles,
-            totalSize: nextTotalSize,
-            unmatchedMovFiles: unmatched,
-            hasMovFile: hasMov,
-            uploadEntries: nextEntries,
-            uploadedBytes: computeUploadedBytes(nextEntries),
+        if (removedFile) {
+          const fp = entryFingerprint(removedFile)
+          const stillUsed = nextFiles.some(file => entryFingerprint(file) === fp)
+          if (!stillUsed) {
+            revokePreviewUrls(previewCache, [fp])
           }
+        }
+
+        const nextEntries = createFileEntries(nextFiles, previewCache)
+        const nextTotalSize = calculateTotalSize(nextFiles)
+        const { unmatched, hasMov } = collectUnmatchedMovFiles(nextFiles)
+
+        set({
+          files: nextFiles,
+          totalSize: nextTotalSize,
+          unmatchedMovFiles: unmatched,
+          hasMovFile: hasMov,
+          uploadEntries: nextEntries,
+          uploadedBytes: computeUploadedBytes(nextEntries),
         })
+
+        get().ensurePreviews()
       },
       addFiles: (incoming) => {
         const state = get()
@@ -288,13 +304,12 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
           return { added: 0, skipped: 0 }
         }
 
-        const fingerprintOf = (file: File) => `${file.name}|${file.size}|${file.lastModified}`
-        const existing = new Set(state.files.map(fingerprintOf))
+        const existing = new Set(state.files.map(entryFingerprint))
 
         const toAdd: File[] = []
         let skipped = 0
         for (const file of incoming) {
-          const fp = fingerprintOf(file)
+          const fp = entryFingerprint(file)
           if (existing.has(fp)) {
             skipped++
             continue
@@ -308,7 +323,7 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
         }
 
         const nextFiles = [...state.files, ...toAdd]
-        const nextEntries = createFileEntries(nextFiles)
+        const nextEntries = createFileEntries(nextFiles, previewCache)
         const nextTotalSize = calculateTotalSize(nextFiles)
         const { unmatched, hasMov } = collectUnmatchedMovFiles(nextFiles)
 
@@ -320,6 +335,8 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
           uploadEntries: nextEntries,
           uploadedBytes: computeUploadedBytes(nextEntries),
         })
+
+        get().ensurePreviews()
 
         return { added: toAdd.length, skipped }
       },
@@ -367,7 +384,7 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
           if (isAbort) {
             set({ phase: 'review' })
             const currentFiles = get().files
-            updateEntries(() => createFileEntries(currentFiles))
+            updateEntries(() => createFileEntries(currentFiles, previewCache))
           }
           else {
             const upgradeCategory = resolveBillingUpgradeCategory(error)
@@ -397,7 +414,7 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
           uploadAbortController = null
           set({ phase: 'review' })
           const currentFiles = get().files
-          updateEntries(() => createFileEntries(currentFiles))
+          updateEntries(() => createFileEntries(currentFiles, previewCache))
           return
         }
         if (phase === 'processing') {
@@ -425,7 +442,7 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
           processingLogs: [],
         })
         const currentFiles = get().files
-        updateEntries(() => createFileEntries(currentFiles))
+        updateEntries(() => createFileEntries(currentFiles, previewCache))
       },
       closeModal: () => {
         get().cleanup()
@@ -434,9 +451,26 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
       setSelectedTags: (tags: string[]) => {
         set({ selectedTags: tags })
       },
+      ensurePreviews: () => {
+        const { files, uploadEntries } = get()
+        primePreviewCache(files, previewCache)
+        let mutated = false
+        const nextEntries = uploadEntries.map((entry) => {
+          const cached = previewCache.get(entry.id) ?? null
+          if (cached === entry.previewUrl) {
+            return entry
+          }
+          mutated = true
+          return { ...entry, previewUrl: cached }
+        })
+        if (mutated) {
+          set({ uploadEntries: nextEntries })
+        }
+      },
       cleanup: () => {
         uploadAbortController?.abort()
         uploadAbortController = null
+        revokePreviewUrls(previewCache)
       },
     }
   })
@@ -462,6 +496,7 @@ export function PhotoUploadStoreProvider({
 
   useEffect(() => {
     setActivePhotoUploadStore(store)
+    store.getState().ensurePreviews()
     return () => {
       clearActivePhotoUploadStoreIfMatches(store)
       store.getState().cleanup()
