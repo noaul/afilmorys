@@ -8,7 +8,6 @@ import { createStore } from 'zustand/vanilla'
 
 import { getRequestErrorMessage } from '~/lib/errors'
 
-import { getPhotoStorageUrl } from '../../api'
 import { useDeletePhotoAssetsMutation, usePhotoAssetListQuery, useUploadPhotoAssetsMutation } from '../../hooks'
 import type { PhotoAssetListItem } from '../../types'
 import { DeleteFromStorageOption } from './DeleteFromStorageOption'
@@ -43,14 +42,13 @@ type PhotoLibraryProviderProps = {
 type CreatePhotoLibraryStoreParams = {
   requestDeleteAssets: (ids: string[], options?: DeleteAssetOptions) => Promise<void>
   requestUploadAssets: (files: File[], options?: PhotoUploadRequestOptions) => Promise<void>
-  requestStorageUrl: (storageKey: string) => Promise<string>
   refetchAssets: () => void
 }
 
 const PhotoLibraryStoreContext = createContext<PhotoLibraryStore | null>(null)
 
 function createPhotoLibraryStore(params: CreatePhotoLibraryStoreParams) {
-  const { requestDeleteAssets, requestUploadAssets, requestStorageUrl, refetchAssets } = params
+  const { requestDeleteAssets, requestUploadAssets, refetchAssets } = params
 
   return createStore<PhotoLibraryStoreState>((set, get) => {
     const getAssetLabel = (asset: PhotoAssetListItem) =>
@@ -125,21 +123,14 @@ function createPhotoLibraryStore(params: CreatePhotoLibraryStoreParams) {
     }
 
     const performOpenAsset = async (asset: PhotoAssetListItem) => {
-      const manifest = asset.manifest?.data
-      const candidate = manifest?.originalUrl ?? manifest?.thumbnailUrl ?? asset.publicUrl
-      if (candidate) {
-        window.open(candidate, '_blank', 'noopener,noreferrer')
+      const photoId = asset.manifest?.data?.id ?? asset.photoId
+      if (!photoId) {
+        toast.error('打开失败', { description: '无法解析图片 ID' })
         return
       }
 
-      try {
-        const url = await requestStorageUrl(asset.storageKey)
-        window.open(url, '_blank', 'noopener,noreferrer')
-      }
-      catch (error) {
-        const message = getRequestErrorMessage(error, '无法获取原图链接')
-        toast.error('打开失败', { description: message })
-      }
+      const url = `${window.location.origin}/photos/${encodeURIComponent(photoId)}`
+      window.open(url, '_blank', 'noopener,noreferrer')
     }
 
     return {
@@ -253,7 +244,6 @@ export function PhotoLibraryProvider({ isActive, children }: PhotoLibraryProvide
           onServerEvent: options?.onServerEvent,
         })
       },
-      requestStorageUrl: storageKey => getPhotoStorageUrl(storageKey),
       refetchAssets: () => {
         const refetch = refetchListRef.current
         if (typeof refetch === 'function') {
