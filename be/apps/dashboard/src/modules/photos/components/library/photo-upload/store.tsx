@@ -8,6 +8,7 @@ import { presentBillingUpgradeModal, resolveBillingUpgradeCategory } from '~/mod
 
 import type { PhotoSyncProgressEvent } from '../../../types'
 import type { PhotoUploadRequestOptions } from '../upload.types'
+import { clearActivePhotoUploadStoreIfMatches, setActivePhotoUploadStore } from './active-store'
 import type { FileProgressEntry, ProcessingLogEntry, ProcessingState, WorkflowPhase } from './types'
 import {
   calculateTotalSize,
@@ -20,6 +21,11 @@ import {
   getErrorMessage,
   normalizeStageCount,
 } from './utils'
+
+export type AddFilesResult = {
+  added: number
+  skipped: number
+}
 
 type PhotoUploadStoreState = {
   files: File[]
@@ -36,6 +42,7 @@ type PhotoUploadStoreState = {
   processingState: ProcessingState | null
   processingLogs: ProcessingLogEntry[]
   removeEntry: (entry: FileProgressEntry) => void
+  addFiles: (files: File[]) => AddFilesResult
   beginUpload: () => Promise<void>
   abortCurrent: () => void
   reset: () => void
@@ -61,6 +68,7 @@ let processingLogSequence = 0
 // Extend upload request timeout to tolerate larger batches / slower networks (10 minutes).
 const UPLOAD_REQUEST_TIMEOUT_MS = 600_000
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUploadStore {
   const { files: initialFiles, availableTags, onUpload, onClose } = params
   const initialEntries = createFileEntries(initialFiles)
@@ -82,12 +90,11 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
 
     const handleProcessingEvent = (event: PhotoSyncProgressEvent) => {
       if (event.type === 'start') {
-        updateEntries((entries) =>
-          entries.map((entry) => ({
+        updateEntries(entries =>
+          entries.map(entry => ({
             ...entry,
             status: entry.status === 'uploading' ? 'processing' : entry.status,
-          })),
-        )
+          })))
         const { summary, totals, options: eventOptions } = event.payload
         set({
           phase: 'processing',
@@ -181,12 +188,11 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
             }
           }
           case 'error': {
-            updateEntries((entries) =>
-              entries.map((entry) => ({
+            updateEntries(entries =>
+              entries.map(entry => ({
                 ...entry,
                 status: entry.status === 'processing' ? 'error' : entry.status,
-              })),
-            )
+              })))
             return {
               phase: 'error',
               processingError: event.payload.message,
@@ -197,14 +203,13 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
             }
           }
           case 'complete': {
-            updateEntries((entries) =>
-              entries.map((entry) => ({
+            updateEntries(entries =>
+              entries.map(entry => ({
                 ...entry,
                 status: entry.status === 'processing' ? 'done' : entry.status,
                 progress: 1,
                 uploadedBytes: entry.size,
-              })),
-            )
+              })))
             return {
               phase: 'completed',
               processingState: {
@@ -222,8 +227,8 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
     }
 
     const handleUploadProgress: NonNullable<PhotoUploadRequestOptions['onUploadProgress']> = (snapshot) => {
-      const progressMap = new Map(snapshot.files.map((file) => [file.index, file]))
-      updateEntries((entries) =>
+      const progressMap = new Map(snapshot.files.map(file => [file.index, file]))
+      updateEntries(entries =>
         entries.map((entry) => {
           const current = progressMap.get(entry.index)
           if (!current) {
@@ -235,8 +240,7 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
             progress: current.progress,
             uploadedBytes: current.uploadedBytes,
           }
-        }),
-      )
+        }))
     }
 
     return {
@@ -277,6 +281,47 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
           }
         })
       },
+      addFiles: (incoming) => {
+        const state = get()
+        if (state.phase !== 'review' || incoming.length === 0) {
+          return { added: 0, skipped: 0 }
+        }
+
+        const fingerprintOf = (file: File) => `${file.name}|${file.size}|${file.lastModified}`
+        const existing = new Set(state.files.map(fingerprintOf))
+
+        const toAdd: File[] = []
+        let skipped = 0
+        for (const file of incoming) {
+          const fp = fingerprintOf(file)
+          if (existing.has(fp)) {
+            skipped++
+            continue
+          }
+          existing.add(fp)
+          toAdd.push(file)
+        }
+
+        if (toAdd.length === 0) {
+          return { added: 0, skipped }
+        }
+
+        const nextFiles = [...state.files, ...toAdd]
+        const nextEntries = createFileEntries(nextFiles)
+        const nextTotalSize = calculateTotalSize(nextFiles)
+        const { unmatched, hasMov } = collectUnmatchedMovFiles(nextFiles)
+
+        set({
+          files: nextFiles,
+          totalSize: nextTotalSize,
+          unmatchedMovFiles: unmatched,
+          hasMovFile: hasMov,
+          uploadEntries: nextEntries,
+          uploadedBytes: computeUploadedBytes(nextEntries),
+        })
+
+        return { added: toAdd.length, skipped }
+      },
       beginUpload: async () => {
         const state = get()
         if (state.unmatchedMovFiles.length > 0 || state.phase === 'uploading' || state.phase === 'processing') {
@@ -294,12 +339,11 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
           processingLogs: [],
         })
 
-        updateEntries((entries) =>
-          entries.map((entry) => ({
+        updateEntries(entries =>
+          entries.map(entry => ({
             ...entry,
             status: 'uploading',
-          })),
-        )
+          })))
 
         const controller = new AbortController()
         uploadAbortController = controller
@@ -314,13 +358,15 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
             timeoutMs: UPLOAD_REQUEST_TIMEOUT_MS,
             onServerEvent: handleProcessingEvent,
           })
-        } catch (error) {
+        }
+        catch (error) {
           const isAbort = (error as DOMException)?.name === 'AbortError'
           if (isAbort) {
             set({ phase: 'review' })
             const currentFiles = get().files
             updateEntries(() => createFileEntries(currentFiles))
-          } else {
+          }
+          else {
             const upgradeCategory = resolveBillingUpgradeCategory(error)
             if (upgradeCategory) {
               presentBillingUpgradeModal(upgradeCategory)
@@ -330,14 +376,14 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
               uploadError: message,
               phase: 'error',
             })
-            updateEntries((entries) =>
-              entries.map((entry) => ({
+            updateEntries(entries =>
+              entries.map(entry => ({
                 ...entry,
                 status: entry.status === 'uploading' ? 'error' : entry.status,
-              })),
-            )
+              })))
           }
-        } finally {
+        }
+        finally {
           uploadAbortController = null
         }
       },
@@ -358,13 +404,11 @@ export function createPhotoUploadStore(params: PhotoUploadStoreParams): PhotoUpl
             processingError: '服务器处理已终止',
             phase: 'error',
           })
-          updateEntries((entries) =>
-            entries.map((entry) => ({
+          updateEntries(entries =>
+            entries.map(entry => ({
               ...entry,
               status: entry.status === 'processing' ? 'error' : entry.status,
-            })),
-          )
-          return
+            })))
         }
       },
       reset: () => {
@@ -414,7 +458,9 @@ export function PhotoUploadStoreProvider({
   )
 
   useEffect(() => {
+    setActivePhotoUploadStore(store)
     return () => {
+      clearActivePhotoUploadStoreIfMatches(store)
       store.getState().cleanup()
     }
   }, [store])
@@ -422,6 +468,7 @@ export function PhotoUploadStoreProvider({
   return <PhotoUploadStoreContext value={store}>{children}</PhotoUploadStoreContext>
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function usePhotoUploadStore<U>(selector: (state: PhotoUploadStoreState) => U) {
   const store = use(PhotoUploadStoreContext)
   if (!store) {
