@@ -10,8 +10,8 @@ import { useShallow } from 'zustand/shallow'
 
 import { LinearBorderPanel } from '~/components/common/LinearBorderPanel'
 
+import { usePhotoLibraryStore } from './photo-library'
 import { getActivePhotoUploadStore } from './photo-upload/active-store'
-import { usePhotoLibraryStore } from './PhotoLibraryProvider'
 import { PhotoUploadConfirmModal } from './PhotoUploadConfirmModal'
 import type { PhotoUploadRequestOptions } from './upload.types'
 
