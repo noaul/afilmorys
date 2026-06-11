@@ -623,6 +623,7 @@ export const PhotoViewer = ({
                         photos={photos}
                         onIndexChange={onIndexChange}
                         visible={isViewerContentVisible}
+                        disableEntryTransition={disableEntryTransition}
                       />
                     </Suspense>
                   </m.div>

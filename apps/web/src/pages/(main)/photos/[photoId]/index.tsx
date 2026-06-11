@@ -3,8 +3,8 @@ import clsx from 'clsx'
 import { useAtomValue } from 'jotai'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { RemoveScroll } from 'react-remove-scroll'
-import { useLocation } from 'react-router'
 
+import { isHydrationEnded } from '~/atoms/hydration'
 import { setViewer, viewerAtom } from '~/atoms/viewer'
 import { NotFound } from '~/components/common/NotFound'
 import { useContextPhotos, usePhotoViewer } from '~/hooks/usePhotoViewer'
@@ -16,10 +16,7 @@ export const Component = () => {
   const photoViewer = usePhotoViewer()
   const viewerState = useAtomValue(viewerAtom)
   const photos = useContextPhotos()
-  const location = useLocation()
-  // location.key === 'default' means this route is the app's initial entry
-  // (full page load / reload), so the viewer should appear without animating in.
-  const [disableEntryTransition] = useState(() => location.key === 'default')
+  const [disableEntryTransition] = useState(() => !isHydrationEnded())
 
   const [ref, setRef] = useState<HTMLElement | null>(null)
   const rootPortalValue = useMemo(
