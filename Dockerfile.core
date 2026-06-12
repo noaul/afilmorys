@@ -4,7 +4,7 @@
 FROM node:lts-alpine AS builder
 ENV PNPM_HOME=/pnpm
 ENV PATH="$PNPM_HOME:$PATH"
-RUN corepack enable && corepack prepare pnpm@10.19.0 --activate
+RUN corepack enable && corepack prepare pnpm@11.1.2 --activate
 
 RUN apk add --no-cache python3 make g++ postgresql-dev
 

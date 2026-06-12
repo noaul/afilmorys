@@ -5,17 +5,17 @@ import 'swiper/css/navigation'
 
 import { Thumbhash } from '@afilmory/ui'
 import { Spring } from '@afilmory/utils'
+import type { AnimationFrameRect, MobileViewerDismissSnapshot } from '@afilmory/viewer-motion'
 import {
-  type AnimationFrameRect,
   createInspectorSheetPresentation,
   DEFAULT_MOBILE_VIEWER_MEDIA_TRANSFORM_ORIGIN,
-  type MobileViewerDismissSnapshot,
   projectDismissedViewerMediaFrame,
   resolveInspectorSheetHeight,
   SharedElementTransitionPreview,
   useViewerMobileInteractions,
   useViewerTransitions,
 } from '@afilmory/viewer-motion'
+import { PanelRightOpen } from 'lucide-react'
 import { AnimatePresence, m } from 'motion/react'
 import { Fragment, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -44,6 +44,7 @@ interface PhotoViewerProps {
   onDragDismiss?: (frame: AnimationFrameRect) => void
   onIndexChange: (index: number) => void
   triggerElement: HTMLElement | null
+  disableEntryTransition?: boolean
   onExitComplete?: () => void
 }
 
@@ -61,6 +62,7 @@ export const PhotoViewer = ({
   onDragDismiss,
   onIndexChange,
   triggerElement,
+  disableEntryTransition = false,
   onExitComplete,
 }: PhotoViewerProps) => {
   const { t } = useTranslation()
@@ -71,6 +73,7 @@ export const PhotoViewer = ({
   const [isDesktopInspectorVisible, setIsDesktopInspectorVisible] = useState(!isMobile)
   const [currentBlobSrc, setCurrentBlobSrc] = useState<string | null>(null)
   const [dragDismissExitFrame, setDragDismissExitFrame] = useState<AnimationFrameRect | null>(null)
+  const [entrySuppressedPhotoId] = useState(() => (disableEntryTransition ? (photos[currentIndex]?.id ?? null) : null))
 
   const currentPhoto = photos[currentIndex]
   const {
@@ -87,6 +90,7 @@ export const PhotoViewer = ({
     handleEntryTransitionComplete,
     handleExitAnimationComplete,
   } = useViewerTransitions({
+    disableEntryTransition,
     exitOverrideFrame: dragDismissExitFrame,
     isOpen,
     layout: AFILMORY_VIEWER_FRAME_LAYOUT,
@@ -118,8 +122,8 @@ export const PhotoViewer = ({
         return
       }
 
-      const viewportRect =
-        containerRef.current?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight)
+      const viewportRect
+        = containerRef.current?.getBoundingClientRect() ?? new DOMRect(0, 0, window.innerWidth, window.innerHeight)
       const projectedFrame = projectDismissedViewerMediaFrame({
         item: {
           width: currentPhoto.width,
@@ -234,7 +238,8 @@ export const PhotoViewer = ({
       if (isImageZoomed || (isMobile && (isVerticalGestureActive || isInspectorVisible))) {
         // 图片被缩放时，禁用 Swiper 的触摸滑动
         swiperRef.current.allowTouchMove = false
-      } else {
+      }
+      else {
         // 图片未缩放时，启用 Swiper 的触摸滑动
         swiperRef.current.allowTouchMove = true
       }
@@ -269,7 +274,9 @@ export const PhotoViewer = ({
 
   // 键盘导航
   useEffect(() => {
-    if (!isOpen) return
+    if (!isOpen) {
+      return
+    }
 
     const handleKeyDown = (event: KeyboardEvent) => {
       switch (event.key) {
@@ -303,7 +310,9 @@ export const PhotoViewer = ({
     }
   }, [shouldMountImageStage])
 
-  if (!currentPhoto) return null
+  if (!currentPhoto) {
+    return null
+  }
 
   return (
     <>
@@ -311,7 +320,7 @@ export const PhotoViewer = ({
         {shouldRenderBackdrop && (
           <m.div
             key="photo-viewer-backdrop"
-            initial={{ opacity: 0 }}
+            initial={disableEntryTransition ? false : { opacity: 0 }}
             animate={{ opacity: isOpen ? 1 : 0 }}
             exit={{ opacity: 0 }}
             transition={Spring.presets.snappy}
@@ -330,7 +339,7 @@ export const PhotoViewer = ({
         {shouldRenderThumbhash && (
           <m.div
             key={`${currentPhoto.id}-thumbhash`}
-            initial={{ opacity: 0 }}
+            initial={disableEntryTransition ? false : { opacity: 0 }}
             animate={{ opacity: isOpen ? 1 : 0 }}
             exit={{ opacity: 0 }}
             transition={Spring.presets.snappy}
@@ -380,7 +389,7 @@ export const PhotoViewer = ({
                   >
                     {/* 顶部工具栏 */}
                     <m.div
-                      initial={{ opacity: 0 }}
+                      initial={disableEntryTransition ? false : { opacity: 0 }}
                       animate={{ opacity: isViewerContentVisible ? 1 : 0 }}
                       exit={{ opacity: 0 }}
                       transition={Spring.presets.snappy}
@@ -408,7 +417,7 @@ export const PhotoViewer = ({
                         <ShareModal
                           photo={currentPhoto}
                           blobSrc={currentBlobSrc || undefined}
-                          trigger={
+                          trigger={(
                             <button
                               type="button"
                               disabled={!isMobileChromeInteractive}
@@ -417,7 +426,7 @@ export const PhotoViewer = ({
                             >
                               <i className="i-mingcute-share-2-line" />
                             </button>
-                          }
+                          )}
                         />
 
                         {/* 展开信息面板（桌面端在折叠时显示） */}
@@ -428,7 +437,7 @@ export const PhotoViewer = ({
                             onClick={() => setIsDesktopInspectorVisible(true)}
                             title={t('inspector.tab.info')}
                           >
-                            <i className="i-lucide-panel-right-open" />
+                            <PanelRightOpen className="size-4" />
                           </button>
                         )}
 
@@ -484,8 +493,8 @@ export const PhotoViewer = ({
                           virtual
                           onSwiper={(swiper) => {
                             swiperRef.current = swiper
-                            swiper.allowTouchMove =
-                              !isImageZoomed && !(isMobile && (isVerticalGestureActive || isInspectorVisible))
+                            swiper.allowTouchMove
+                              = !isImageZoomed && !(isMobile && (isVerticalGestureActive || isInspectorVisible))
                           }}
                           onSlideChange={(swiper) => {
                             onIndexChange(swiper.activeIndex)
@@ -499,6 +508,9 @@ export const PhotoViewer = ({
                               isCurrentImage,
                               isEntryImageCatchupVisible: shouldShowEntryImageCatchup,
                             })
+                            const suppressSlideEntry
+                              = (isCurrentImage && entryTransition?.variant === 'entry')
+                                || photo.id === entrySuppressedPhotoId
                             return (
                               <SwiperSlide
                                 key={photo.id}
@@ -507,22 +519,10 @@ export const PhotoViewer = ({
                               >
                                 <ReactionRail photoId={photo.id} />
                                 <m.div
-                                  initial={
-                                    isCurrentImage && entryTransition?.variant === 'entry'
-                                      ? false
-                                      : { opacity: 0.5, scale: 0.95 }
-                                  }
-                                  animate={
-                                    isCurrentImage && entryTransition?.variant === 'entry'
-                                      ? undefined
-                                      : { opacity: 1, scale: 1 }
-                                  }
+                                  initial={suppressSlideEntry ? false : { opacity: 0.5, scale: 0.95 }}
+                                  animate={suppressSlideEntry ? undefined : { opacity: 1, scale: 1 }}
                                   exit={{ opacity: 0, scale: 0.95 }}
-                                  transition={
-                                    isCurrentImage && entryTransition?.variant === 'entry'
-                                      ? undefined
-                                      : Spring.presets.smooth
-                                  }
+                                  transition={suppressSlideEntry ? undefined : Spring.presets.smooth}
                                   className="relative flex h-full w-full items-center justify-center"
                                   style={{
                                     opacity: hideCurrentImage ? 0 : 1,
@@ -592,20 +592,20 @@ export const PhotoViewer = ({
                           {currentIndex > 0 && (
                             <button
                               type="button"
-                              className={`bg-material-medium absolute top-1/2 left-4 z-20 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-white opacity-0 backdrop-blur-sm duration-200 group-hover/photo-viewer:opacity-100 hover:bg-black/40`}
+                              className="bg-material-medium absolute top-1/2 left-4 z-20 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-white opacity-0 backdrop-blur-sm duration-200 group-hover/photo-viewer:opacity-100 hover:bg-black/40"
                               onClick={handlePrevious}
                             >
-                              <i className={`i-mingcute-left-line text-xl`} />
+                              <i className="i-mingcute-left-line text-xl" />
                             </button>
                           )}
 
                           {currentIndex < photos.length - 1 && (
                             <button
                               type="button"
-                              className={`bg-material-medium absolute top-1/2 right-4 z-20 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-white opacity-0 backdrop-blur-sm duration-200 group-hover/photo-viewer:opacity-100 hover:bg-black/40`}
+                              className="bg-material-medium absolute top-1/2 right-4 z-20 flex size-8 -translate-y-1/2 items-center justify-center rounded-full text-white opacity-0 backdrop-blur-sm duration-200 group-hover/photo-viewer:opacity-100 hover:bg-black/40"
                               onClick={handleNext}
                             >
-                              <i className={`i-mingcute-right-line text-xl`} />
+                              <i className="i-mingcute-right-line text-xl" />
                             </button>
                           )}
                         </Fragment>
@@ -623,6 +623,7 @@ export const PhotoViewer = ({
                         photos={photos}
                         onIndexChange={onIndexChange}
                         visible={isViewerContentVisible}
+                        disableEntryTransition={disableEntryTransition}
                       />
                     </Suspense>
                   </m.div>
@@ -662,7 +663,7 @@ export const PhotoViewer = ({
           transition={entryTransition}
           onReady={handleEntryTransitionReady}
           onComplete={handleEntryTransitionComplete}
-          renderPlaceholder={(thumbHash) => (
+          renderPlaceholder={thumbHash => (
             <Thumbhash thumbHash={thumbHash} className="pointer-events-none absolute inset-0 h-full w-full" />
           )}
         />
@@ -672,7 +673,7 @@ export const PhotoViewer = ({
           key={`${exitTransition.variant}-${exitTransition.itemId}`}
           transition={exitTransition}
           onComplete={handleExitAnimationComplete}
-          renderPlaceholder={(thumbHash) => (
+          renderPlaceholder={thumbHash => (
             <Thumbhash thumbHash={thumbHash} className="pointer-events-none absolute inset-0 h-full w-full" />
           )}
         />

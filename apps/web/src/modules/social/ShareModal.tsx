@@ -44,7 +44,9 @@ export const ShareModal = ({ photo, trigger, blobSrc }: ShareModalTriggerProps) 
       onClick: (event: MouseEvent<HTMLElement>) => {
         // @ts-expect-error - trigger is a valid React element
         trigger.props?.onClick?.(event)
-        if (event.defaultPrevented) return
+        if (event.defaultPrevented) {
+          return
+        }
         handleOpen()
       },
     })
@@ -72,13 +74,17 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
 
   const shareLink = useMemo(() => {
     const pathname = `/photos/${photo.id}`
-    if (!resolvedBaseUrl) return pathname
+    if (!resolvedBaseUrl) {
+      return pathname
+    }
     return `${resolvedBaseUrl}${pathname}`
   }, [photo.id, resolvedBaseUrl])
 
   const ogPreviewUrl = useMemo(() => {
     const path = `/og/${photo.id}`
-    if (!resolvedBaseUrl) return path
+    if (!resolvedBaseUrl) {
+      return path
+    }
     return `${resolvedBaseUrl}${path}`
   }, [photo.id, resolvedBaseUrl])
 
@@ -90,7 +96,9 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
   const socialOptions = useMemo(() => getSocialOptions(t), [t])
 
   const handleNativeShare = useCallback(async () => {
-    if (!canUseNativeShare) return
+    if (!canUseNativeShare) {
+      return
+    }
 
     try {
       const files = await buildShareFiles(photo, blobSrc)
@@ -101,7 +109,8 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
         ...(files.length > 0 ? { files } : {}),
       })
       dismiss()
-    } catch {
+    }
+    catch {
       await navigator.clipboard.writeText(shareLink)
       toast.success(t('photo.share.linkCopied'))
       dismiss()
@@ -112,7 +121,8 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
     try {
       await navigator.clipboard.writeText(shareLink)
       toast.success(t('photo.share.linkCopied'))
-    } catch {
+    }
+    catch {
       toast.error(t('photo.share.copy.failed'))
       throw new Error('Failed to copy')
     }
@@ -123,9 +133,11 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
       setIsDownloadingOriginal(true)
       await downloadFile(photo.originalUrl, `${photo.id}.jpg`)
       toast.success(t('photo.share.download.original'))
-    } catch {
+    }
+    catch {
       toast.error(t('photo.share.copy.failed'))
-    } finally {
+    }
+    finally {
       setIsDownloadingOriginal(false)
     }
   }, [photo.id, photo.originalUrl, t])
@@ -135,9 +147,11 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
       setIsDownloadingPreview(true)
       await downloadFile(ogPreviewUrl, `${photo.id}-og.png`)
       toast.success(t('photo.share.downloadPreview'))
-    } catch {
+    }
+    catch {
       toast.error(t('photo.share.copy.failed'))
-    } finally {
+    }
+    finally {
       setIsDownloadingPreview(false)
     }
   }, [ogPreviewUrl, photo.id, t])
@@ -216,7 +230,7 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
             />
           )}
           {/* Social share buttons */}
-          {socialOptions.map((option) => (
+          {socialOptions.map(option => (
             <ShareActionButton
               key={option.id}
               icon={option.icon}
@@ -233,7 +247,7 @@ const ShareSheet: ModalComponent<ShareSheetProps> = ({ photo, blobSrc, dismiss }
             title={t('photo.share.download.original')}
           />
           <ShareActionButton
-            icon="i-lucide-image"
+            icon="i-mingcute-pic-line"
             label={isDownloadingPreview ? '…' : 'Preview'}
             onClick={handleDownloadPreview}
             disabled={isDownloadingPreview}
@@ -269,7 +283,8 @@ async function buildShareFiles(photo: PhotoManifest, blobSrc?: string) {
     const response = await fetch(imageUrl)
     const blob = await response.blob()
     return [new File([blob], `${photo.title || photo.id}.jpg`, { type: blob.type || 'image/jpeg' })]
-  } catch {
+  }
+  catch {
     return []
   }
 }

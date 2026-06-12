@@ -45,11 +45,11 @@ For developers who need full control over their deployment:
 If you use [1Panel](https://1panel.cn/) to manage your VPS, this is the easiest self-hosting path — uses 1Panel's existing PostgreSQL and Redis:
 
 ```bash
-git clone https://github.com/uovme/afilmorys.git
+git clone https://github.com/noaul/afilmorys.git
 cd afilmorys
 cp .env.docker.example .env.docker
 # Edit .env.docker: set DATABASE_URL, REDIS_URL, secrets
-docker compose up -d --build
+docker compose --env-file .env.docker up -d --build
 ```
 
 See [docs/deploy-1panel.md](./docs/deploy-1panel.md) for the full step-by-step guide.

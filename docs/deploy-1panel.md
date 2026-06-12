@@ -1,10 +1,11 @@
 # 1Panel / Docker Compose 部署指南
 
-本指南介绍如何在 VPS 上通过 Docker Compose 部署 Afilmory。默认配置会随项目启动独立的 PostgreSQL 和 Redis 容器，并把数据保存在 Docker volumes 中，适合 1Panel 服务器直接部署。
+本指南介绍如何在 VPS 上通过 Docker Compose 部署 Afilmory。默认配置只启动 Afilmory Core 容器，并通过 1Panel 的 Docker 网络连接 1Panel 已有的 PostgreSQL 和 Redis，避免重复创建数据库容器。
 
 ## 前提条件
 
 - VPS 已安装 Docker 和 Docker Compose（1Panel 通常会自动安装）
+- 1Panel 中已安装 PostgreSQL 和 Redis，并已创建 Afilmory 使用的数据库与账号
 - 已配置好反向代理域名（可选，但生产环境推荐）
 
 ## 部署步骤
@@ -12,7 +13,7 @@
 ### 1. 拉取项目代码
 
 ```bash
-git clone https://github.com/uovme/afilmorys.git
+git clone https://github.com/noaul/afilmorys.git
 cd afilmorys
 ```
 
@@ -26,11 +27,13 @@ nano .env.docker
 至少修改以下值：
 
 ```env
-POSTGRES_PASSWORD=这里填数据库密码
-DATABASE_URL=postgresql://afilmory:这里填数据库密码@db:5432/afilmory
+DATABASE_URL=postgresql://afilmory:这里填数据库密码@1panel-postgresql:5432/afilmory
+REDIS_URL=redis://:这里填Redis密码@1panel-redis:6379/0
 CONFIG_ENCRYPTION_KEY=这里填 openssl rand -hex 32 生成的密钥
 BETTER_AUTH_SECRET=这里填另一个 openssl rand -hex 32 生成的密钥
 ```
+
+如果你的 1Panel PostgreSQL 或 Redis 容器名不同，请以 `docker ps` 中显示的容器名为准；如果 Redis 没有密码，`REDIS_URL` 可写为 `redis://1panel-redis:6379/0`。
 
 可选：如果只允许指定邮箱登录，配置：
 
@@ -75,12 +78,7 @@ Hono HTTP application started on http://0.0.0.0:1841.
 
 ## 数据持久化
 
-默认 compose 会创建两个 volumes：
-
-- `afilmorys_pgdata`：PostgreSQL 数据
-- `afilmorys_redisdata`：Redis 数据
-
-更新代码或重建镜像不会删除这些 volumes。不要使用 `docker compose down -v`，除非你明确要清空数据库。
+当前 compose 不创建 PostgreSQL 或 Redis volume，数据持久化由 1Panel 管理的数据库和 Redis 服务负责。更新代码、重建镜像或执行 `docker compose down` 不会删除 1Panel 中已有的数据。
 
 ## 常用管理命令
 
@@ -113,9 +111,9 @@ docker logs afilmory_core
 | 日志关键词 | 原因 | 解决方案 |
 |-----------|------|---------|
 | `DATABASE_URL is required` | 环境变量缺失 | 检查 `.env.docker` 文件是否存在且配置正确 |
-| `password authentication failed` | 数据库密码不一致 | 确认 `POSTGRES_PASSWORD` 与 `DATABASE_URL` 中的密码一致；已有 volume 初始化后再改密码不会自动修改数据库用户密码 |
-| `Database not ready` | PostgreSQL 启动失败或网络异常 | 查看 `docker logs afilmory_db` |
-| `ECONNREFUSED` (Redis) | Redis 不可达 | 查看 `docker logs afilmory_redis` |
+| `password authentication failed` | 数据库账号或密码不正确 | 确认 `DATABASE_URL` 中的用户名、密码、数据库名与 1Panel PostgreSQL 中创建的一致 |
+| `Database not ready` | PostgreSQL 不可达或网络异常 | 确认 `DATABASE_URL` 中的容器名正确，并查看 1Panel PostgreSQL 容器日志 |
+| `ECONNREFUSED` (Redis) | Redis 不可达 | 确认 `REDIS_URL` 中的容器名、端口和密码正确，并查看 1Panel Redis 容器日志 |
 
 ### 无法访问网页
 
