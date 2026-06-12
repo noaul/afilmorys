@@ -126,7 +126,7 @@ docker logs afilmory_core
 默认宿主机端口为 `1841`。如需修改，编辑 `.env.docker`：
 
 ```env
-APP_PORT=9090
+APP_PORT=127.0.0.1:9090
 PORT=1841
 ```
 
