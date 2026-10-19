@@ -12,11 +12,10 @@
     "noImplicitAny": false,
     "noEmit": true,
     "allowSyntheticDefaultImports": true,
-    "esModuleInterop": false,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "skipDefaultLibCheck": true,
     "skipLibCheck": true
   },
-  "include": []
+  "include": ["src/**/*"]
 }

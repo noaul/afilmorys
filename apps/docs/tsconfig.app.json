@@ -9,7 +9,6 @@
     "useDefineForClassFields": true,
 
     /* Path mapping */
-    "baseUrl": ".",
     "module": "ESNext",
 
     /* Bundler mode */
@@ -18,6 +17,7 @@
       "@/*": ["./*"]
     },
 
+    "types": ["node", "mdx"],
     "allowImportingTsExtensions": true,
     /* Linting */
     "strict": true,
@@ -30,5 +30,5 @@
     "skipLibCheck": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src", "contents"]
+  "include": ["src", "contents", "../../packages/ui/global.d.ts"]
 }

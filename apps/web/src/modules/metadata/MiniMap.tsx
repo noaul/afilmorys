@@ -6,6 +6,7 @@ import Map from 'react-map-gl/maplibre'
 import { Link } from 'react-router'
 
 import { getMapStyle } from '~/lib/map/style'
+import { mapLibreWorkerUrl } from '~/lib/map/worker'
 
 interface MiniMapProps {
   latitude: number
@@ -38,6 +39,7 @@ export const MiniMap = ({ latitude, longitude, photoId }: MiniMapProps) => {
         zoom={15}
         style={{ width: '100%', height: '100%' }}
         mapStyle={getMapStyle()}
+        workerUrl={mapLibreWorkerUrl}
         attributionControl={false}
         onLoad={handleMapLoad}
         interactive={false}
@@ -60,7 +62,7 @@ export const MiniMap = ({ latitude, longitude, photoId }: MiniMapProps) => {
 
       {/* 点击跳转到explore页面的遮罩 */}
       <Link
-        to={`/explory?photoId=${photoId}`}
+        to={`/map?photoId=${photoId}`}
         target="_blank"
         className="absolute inset-0 cursor-pointer transition-opacity duration-200 hover:bg-black/10"
         aria-label={t('minimap.view.in.map')}

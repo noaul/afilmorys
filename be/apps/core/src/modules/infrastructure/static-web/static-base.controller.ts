@@ -1,12 +1,14 @@
-import type { Context } from 'hono'
-
-import { getTenantContext } from '@core/modules/platform/tenant/tenant.context'
 import { ROOT_TENANT_SLUG } from '@core/modules/platform/tenant/tenant.constants'
+import { getTenantContext } from '@core/modules/platform/tenant/tenant.context'
+import type { Context } from 'hono'
 
 import type { StaticAssetService } from './static-asset.service'
 import type { StaticDashboardService } from './static-dashboard.service'
 import { STATIC_DASHBOARD_BASENAME } from './static-dashboard.service'
 import type { StaticWebService } from './static-web.service'
+
+const LEGACY_DASHBOARD_PREFIX_PATTERN = /^\/static\/dashboard/
+const TRAILING_SLASH_PATTERN = /\/+$/
 
 export abstract class StaticBaseController {
   constructor(
@@ -53,7 +55,7 @@ export abstract class StaticBaseController {
     }
 
     if (this.isLegacyDashboardPath(pathname)) {
-      return pathname.replace(/^\/static\/dashboard/, STATIC_DASHBOARD_BASENAME)
+      return pathname.replace(LEGACY_DASHBOARD_PREFIX_PATTERN, STATIC_DASHBOARD_BASENAME)
     }
 
     return pathname
@@ -69,9 +71,6 @@ export abstract class StaticBaseController {
   }
 
   protected isDashboardBasename(pathname: string): boolean {
-    if (STATIC_DASHBOARD_BASENAME === '/') {
-      return this.isRootTenant()
-    }
     return pathname === STATIC_DASHBOARD_BASENAME || pathname.startsWith(`${STATIC_DASHBOARD_BASENAME}/`)
   }
 
@@ -104,7 +103,8 @@ export abstract class StaticBaseController {
   protected shouldAllowTenantlessDashboardAccess(pathname: string): boolean {
     const normalized = this.normalizePathname(pathname)
     const welcomePath = `${STATIC_DASHBOARD_BASENAME}/welcome`
-    return normalized === welcomePath
+    const storageHandoffPath = `${STATIC_DASHBOARD_BASENAME}/storage-handoff`
+    return normalized === welcomePath || normalized === storageHandoffPath
   }
 
   protected normalizePathname(pathname: string): string {
@@ -120,7 +120,7 @@ export abstract class StaticBaseController {
       return '/'
     }
     if (trimmed.length > 1 && trimmed.endsWith('/')) {
-      return trimmed.replace(/\/+$/, '')
+      return trimmed.replace(TRAILING_SLASH_PATTERN, '')
     }
     return trimmed
   }
