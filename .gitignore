@@ -12,7 +12,6 @@ thomas-x2d-xcd-25v-1.webp
 
 config.json
 .env
-.env.docker
 builder.config.ts
 
 apps/web/assets-git

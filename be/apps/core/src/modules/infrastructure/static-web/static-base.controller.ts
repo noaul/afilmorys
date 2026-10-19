@@ -1,5 +1,3 @@
-import { ROOT_TENANT_SLUG } from '@core/modules/platform/tenant/tenant.constants'
-import { getTenantContext } from '@core/modules/platform/tenant/tenant.context'
 import type { Context } from 'hono'
 
 import type { StaticAssetService } from './static-asset.service'
@@ -46,10 +44,6 @@ export abstract class StaticBaseController {
       return pathname
     }
 
-    if (this.isRootTenant() && !this.isDashboardBasename(pathname) && !this.isLegacyDashboardPath(pathname)) {
-      return `${STATIC_DASHBOARD_BASENAME}${pathname === '/' ? '' : pathname}`
-    }
-
     if (this.isDashboardBasename(pathname)) {
       return pathname
     }
@@ -59,11 +53,6 @@ export abstract class StaticBaseController {
     }
 
     return pathname
-  }
-
-  protected isRootTenant(): boolean {
-    const tenantContext = getTenantContext()
-    return tenantContext?.tenant?.slug === ROOT_TENANT_SLUG
   }
 
   protected isDashboardPath(pathname: string): boolean {

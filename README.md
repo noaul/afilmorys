@@ -46,23 +46,9 @@ The easiest way to create your photo gallery. No deployment, no servers, no main
 
 For developers who need full control over their deployment:
 
-**Docker + 1Panel (Recommended for VPS)**
-
-If you use [1Panel](https://1panel.cn/) to manage your VPS, this is the easiest self-hosting path — uses 1Panel's existing PostgreSQL and Redis:
-
+**Docker (Recommended)**
 ```bash
-git clone https://github.com/noaul/afilmorys.git
-cd afilmorys
-cp .env.docker.example .env.docker
-# Edit .env.docker: set DATABASE_URL, REDIS_URL, secrets
-docker compose --env-file .env.docker up -d --build
-```
-
-See [docs/deploy-1panel.md](./docs/deploy-1panel.md) for the full step-by-step guide.
-
-**Docker (Standalone)**
-```bash
-# See the upstream Docker deployment guide
+# See our Docker deployment guide
 https://github.com/Afilmory/docker
 ```
 

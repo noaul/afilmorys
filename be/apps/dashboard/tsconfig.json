@@ -3,7 +3,7 @@
     "target": "ESNext",
     "jsx": "preserve",
     "lib": ["DOM", "DOM.Iterable", "ESNext"],
-    "ignoreDeprecations": "5.0",
+    "ignoreDeprecations": "6.0",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "paths": {

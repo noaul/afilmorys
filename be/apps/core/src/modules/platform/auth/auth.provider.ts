@@ -218,7 +218,6 @@ export class AuthProvider implements OnModuleInit {
           creem_subscription: creemSubscriptions,
         },
       }),
-      secret: env.BETTER_AUTH_SECRET ?? env.CONFIG_ENCRYPTION_KEY,
       socialProviders: socialProviders as BetterAuthOptions['socialProviders'],
       emailAndPassword: { enabled: true },
       trustedOrigins: await this.buildTrustedOrigins(),

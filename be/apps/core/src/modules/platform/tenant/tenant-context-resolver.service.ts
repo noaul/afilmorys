@@ -14,7 +14,13 @@ import { TenantService } from './tenant.service'
 import type { TenantAggregate, TenantContext } from './tenant.types'
 import { TenantDomainService } from './tenant-domain.service'
 import { extractTenantSlugFromHost } from './tenant-host.utils'
-import { isRootDashboardPath, isRootHost } from './root-tenant-routing'
+
+const ROOT_TENANT_PATH_PREFIXES = [
+  '/api/super-admin',
+  '/api/settings',
+  '/api/storage/settings',
+  '/api/builder/settings',
+] as const
 
 export interface TenantResolutionOptions {
   throwOnMissing?: boolean
@@ -89,7 +95,7 @@ export class TenantContextResolver {
         this.log.verbose('Resolved tenant from gateway state during OAuth callback', { slug: derivedSlug })
       }
     }
-    if (!derivedSlug && isRootHost(host, baseDomain) && isRootDashboardPath(context.req.path)) {
+    if (!derivedSlug && this.isRootTenantPath(context.req.path)) {
       derivedSlug = ROOT_TENANT_SLUG
     }
 
@@ -130,6 +136,16 @@ export class TenantContextResolver {
     }
 
     return tenantContext
+  }
+
+  private isRootTenantPath(path: string | undefined): boolean {
+    if (!path) {
+      return false
+    }
+    const normalizedPath = path.toLowerCase()
+    return ROOT_TENANT_PATH_PREFIXES.some(
+      (prefix) => normalizedPath === prefix || normalizedPath.startsWith(`${prefix.toLowerCase()}/`),
+    )
   }
 
   private getExistingContext(): TenantContext | null {

@@ -1,7 +1,7 @@
 import { TextDecoder } from 'node:util'
 
 import { decodeGatewayState, encodeGatewayState } from '@afilmory/be-utils'
-import { authAccounts, authSessions, authUsers, tenantDomains, tenants } from '@afilmory/db'
+import { authUsers } from '@afilmory/db'
 import { env } from '@afilmory/env'
 import { DbAccessor } from '@core/database/database.provider'
 import { AllowPlaceholderTenant } from '@core/decorators/allow-placeholder.decorator'
@@ -12,13 +12,12 @@ import { BypassResponseTransform } from '@core/interceptors/response-transform.d
 import { SystemSettingService } from '@core/modules/configuration/system-setting/system-setting.service'
 import { Body, ContextParam, Controller, createLogger, Get, HttpContext, Post } from '@tsuki-hono/common'
 import { freshSessionMiddleware } from 'better-auth/api'
-import { and, eq } from 'drizzle-orm'
+import { eq } from 'drizzle-orm'
 import type { Context } from 'hono'
 
 import { getTenantContext, isPlaceholderTenantContext } from '../tenant/tenant.context'
 import type { TenantRecord } from '../tenant/tenant.types'
 import { AuthProvider, MOBILE_AUTH_BROKER_SLUG } from './auth.provider'
-import { isEmailAllowed, parseAllowedEmails } from './auth-allowlist'
 import { AuthRegistrationService } from './auth-registration.service'
 import {
   buildNativeOAuthCallbackUrl,
@@ -28,7 +27,6 @@ import {
 import { WorkspaceMembershipService } from './workspace-membership.service'
 
 const logger = createLogger('AuthController')
-const SESSION_TOKEN_COOKIE_PATTERN = /session_token=([^;]+)/
 
 const SOCIAL_PROVIDER_METADATA: Record<string, { name: string, icon: string }> = {
   google: {
@@ -131,7 +129,6 @@ export class AuthController {
   ) {}
 
   private readonly gatewayStateSecret = env.AUTH_GATEWAY_STATE_SECRET ?? env.CONFIG_ENCRYPTION_KEY
-  private readonly allowedEmails = parseAllowedEmails(env.AUTH_ALLOWED_EMAILS)
 
   @AllowPlaceholderTenant()
   @Get('/session')
@@ -572,11 +569,9 @@ export class AuthController {
       }
     }
 
-    // Skip host rewrite if current host is already a custom domain for this tenant
     if (tenantSlugFromState) {
       const { hostname } = reqUrl
-      const isCustomDomain = await this.isCustomDomainForTenant(hostname, tenantSlugFromState)
-      if (!isCustomDomain && !hostname.startsWith(`${tenantSlugFromState}.`)) {
+      if (!hostname.startsWith(`${tenantSlugFromState}.`)) {
         reqUrl.hostname = `${tenantSlugFromState}.${hostname}`
         didRewriteHost = true
       }
@@ -595,9 +590,7 @@ export class AuthController {
       return context.redirect(reqUrl.toString(), 302)
     }
 
-    const response = await this.auth.handler(context)
-
-    return (await this.enforceAuthAllowlist(response)) ?? response
+    return await this.auth.handler(context)
   }
 
   /**
@@ -635,15 +628,13 @@ export class AuthController {
 
     const headers = new Headers(request.headers)
     headers.delete('content-length')
-    const response = await this.auth.handleRequest(
+    return await this.auth.handleRequest(
       new Request(request.url, {
         body,
         headers,
         method: request.method,
       }),
     )
-
-    return (await this.enforceAuthAllowlist(response)) ?? response
   }
 
   @AllowPlaceholderTenant()
@@ -865,67 +856,5 @@ export class AuthController {
       logger.error(`[AuthController] Failed to wrap OAuth gateway state for url=${url}`, error)
       return url
     }
-  }
-
-  private async isCustomDomainForTenant(hostname: string, tenantSlug: string): Promise<boolean> {
-    try {
-      const db = this.dbAccessor.get()
-      const [tenant] = await db.select({ id: tenants.id }).from(tenants).where(eq(tenants.slug, tenantSlug)).limit(1)
-      if (!tenant)
-        return false
-
-      const [domain] = await db
-        .select({ id: tenantDomains.id })
-        .from(tenantDomains)
-        .where(and(eq(tenantDomains.tenantId, tenant.id), eq(tenantDomains.domain, hostname)))
-        .limit(1)
-      return !!domain
-    }
-    catch {
-      return false
-    }
-  }
-
-  private async enforceAuthAllowlist(response: Response): Promise<Response | null> {
-    if (this.allowedEmails.size === 0) {
-      return null
-    }
-
-    const setCookie = response.headers.get('set-cookie') ?? ''
-    const sessionTokenMatch = setCookie.match(SESSION_TOKEN_COOKIE_PATTERN)
-    if (!sessionTokenMatch) {
-      return null
-    }
-
-    // Better Auth sets a signed cookie: encodeURIComponent(`${token}.${signature}`)
-    const [token] = decodeURIComponent(sessionTokenMatch[1]).split('.', 1)
-    const db = this.dbAccessor.get()
-    const [session] = await db
-      .select({ userId: authSessions.userId })
-      .from(authSessions)
-      .where(eq(authSessions.token, token))
-      .limit(1)
-
-    if (!session) {
-      return null
-    }
-
-    const [user] = await db
-      .select({ id: authUsers.id, email: authUsers.email })
-      .from(authUsers)
-      .where(eq(authUsers.id, session.userId))
-      .limit(1)
-
-    if (!user || isEmailAllowed(user.email, this.allowedEmails)) {
-      return null
-    }
-
-    await db.delete(authSessions).where(eq(authSessions.userId, user.id))
-    await db.delete(authAccounts).where(eq(authAccounts.userId, user.id))
-    await db.delete(authUsers).where(eq(authUsers.id, user.id))
-    return new Response('<html><body><h1>Access Denied</h1><p>This account is not authorized.</p></body></html>', {
-      status: 403,
-      headers: { 'content-type': 'text/html' },
-    })
   }
 }

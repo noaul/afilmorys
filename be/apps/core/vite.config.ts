@@ -41,7 +41,9 @@ function extractVersionFromNpmLsOutput(stdout: string, name: string): string | u
     const version = parsed?.dependencies?.[name]?.version
     return typeof version === 'string' ? version : undefined
   }
-  catch {}
+  catch {
+
+  }
 }
 
 async function resolveVersionWithNpm(name: string): Promise<string | undefined> {

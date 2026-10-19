@@ -2,7 +2,7 @@ import { Button, Input, Label, LinearBorderContainer } from '@afilmory/ui'
 import { Spring } from '@afilmory/utils'
 import { CircleAlert } from 'lucide-react'
 import { m } from 'motion/react'
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { SocialAuthButtons } from '~/modules/auth/components/SocialAuthButtons'
 import { useLogin } from '~/modules/auth/hooks/useLogin'
@@ -15,17 +15,7 @@ export function Component() {
   const tenantSlug = useMemo(() => {
     return getTenantSlugFromHost(window.location.hostname)
   }, [])
-  const showEmailLogin = true
-
-  useEffect(() => {
-    if (tenantSlug === 'root') {
-      window.location.replace('/root-login')
-    }
-  }, [tenantSlug])
-
-  if (tenantSlug === 'root') {
-    return null
-  }
+  const showEmailLogin = !tenantSlug
 
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()

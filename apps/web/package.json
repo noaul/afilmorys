@@ -60,7 +60,6 @@
     "masonic": "4.1.0",
     "motion": "14.2.0",
     "ofetch": "1.5.1",
-    "prop-types": "^15.8.1",
     "react": "19.3.0",
     "react-blurhash": "0.3.0",
     "react-dom": "19.3.0",

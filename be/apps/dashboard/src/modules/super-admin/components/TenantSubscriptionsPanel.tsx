@@ -289,17 +289,15 @@ export function TenantSubscriptionsPanel() {
                     <td className="px-3 py-3 align-top">
                       <div className="font-medium text-text">
                         <a
-                          href={tenant.customDomain ? `https://${tenant.customDomain}` : buildTenantUrl(tenant.slug)}
+                          href={buildTenantUrl(tenant.slug)}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="text-primary hover:underline"
                         >
-                          {tenant.ownerEmail || tenant.name}
+                          {tenant.name}
                         </a>
                       </div>
-                      <div className="text-text-secondary text-xs">
-                        {tenant.customDomain || tenant.slug}
-                      </div>
+                      <div className="text-text-secondary text-xs">{tenant.slug}</div>
                     </td>
                     <td className="px-3 py-3 align-top">
                       <PlanSelector

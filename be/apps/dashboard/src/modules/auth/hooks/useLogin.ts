@@ -83,8 +83,7 @@ export function useLogin() {
         return
       }
 
-      // Single-domain deployments have no tenant subdomains to redirect to
-      if (activeWorkspace?.slug && getTenantSlugFromHost(window.location.hostname)) {
+      if (activeWorkspace?.slug) {
         try {
           window.location.replace(buildTenantUrl(activeWorkspace.slug, '/'))
           return

@@ -1,4 +1,4 @@
-import { authUsers, photoAssets, tenantDomains, tenantMemberships, tenants } from '@afilmory/db'
+import { photoAssets, tenants } from '@afilmory/db'
 import { DbAccessor } from '@core/database/database.provider'
 import { PlatformRoles } from '@core/guards/roles.decorator'
 import { BypassResponseTransform } from '@core/interceptors/response-transform.decorator'
@@ -9,7 +9,7 @@ import { BillingUsageService } from '@core/modules/platform/billing/usage/billin
 import { ManagedStorageService } from '@core/modules/platform/managed-storage/managed-storage.service'
 import { TenantService } from '@core/modules/platform/tenant/tenant.service'
 import { Body, Controller, Delete, Get, Param, Patch, Query } from '@tsuki-hono/common'
-import { and, desc, eq, inArray } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 
 import type { BillingPlanId } from '../billing/plan/billing-plan.types'
 import { DataManagementService } from '../data-management/data-management.service'
@@ -76,22 +76,17 @@ export class SuperAdminTenantController {
     const { items: tenantAggregates, total } = tenantResult
 
     const tenantIds = tenantAggregates.map(aggregate => aggregate.tenant.id)
-    const [usageTotalsMap, storageUsageMap, ownerMap, domainMap] = await Promise.all([
-      this.billingUsageService.getUsageTotalsForTenants(tenantIds),
-      managedProviderKey && tenantIds.length > 0
-        ? this.managedStorageService.getUsageTotalsForTenants(managedProviderKey, tenantIds)
-        : Promise.resolve({}),
-      this.getOwnerEmailsForTenants(tenantIds),
-      this.getVerifiedDomainsForTenants(tenantIds),
-    ])
+    const usageTotalsMap = await this.billingUsageService.getUsageTotalsForTenants(tenantIds)
+    const storageUsageMap
+      = managedProviderKey && tenantIds.length > 0
+        ? await this.managedStorageService.getUsageTotalsForTenants(managedProviderKey, tenantIds)
+        : {}
 
     return {
       tenants: tenantAggregates.map(aggregate => ({
         ...aggregate.tenant,
         usageTotals: usageTotalsMap[aggregate.tenant.id] ?? [],
         storageUsage: storageUsageMap[aggregate.tenant.id] ?? null,
-        ownerEmail: ownerMap[aggregate.tenant.id] ?? null,
-        customDomain: domainMap[aggregate.tenant.id] ?? null,
       })),
       plans,
       storagePlans: Object.entries(storagePlanCatalog).map(([id, def]) => ({
@@ -235,38 +230,5 @@ export class SuperAdminTenantController {
       .where(eq(tenants.id, tenantId))
       .limit(1)
     return tenant ?? null
-  }
-
-  private async getOwnerEmailsForTenants(tenantIds: string[]): Promise<Record<string, string>> {
-    if (tenantIds.length === 0)
-      return {}
-    const rows = await this.db
-      .get()
-      .select({ tenantId: tenantMemberships.tenantId, email: authUsers.email })
-      .from(tenantMemberships)
-      .innerJoin(authUsers, eq(authUsers.id, tenantMemberships.userId))
-      .where(
-        and(
-          inArray(tenantMemberships.tenantId, tenantIds),
-          eq(tenantMemberships.role, 'owner'),
-          eq(tenantMemberships.status, 'active'),
-        ),
-      )
-    return Object.fromEntries(rows.map(row => [row.tenantId, row.email]))
-  }
-
-  private async getVerifiedDomainsForTenants(tenantIds: string[]): Promise<Record<string, string>> {
-    if (tenantIds.length === 0)
-      return {}
-    const rows = await this.db
-      .get()
-      .select({ tenantId: tenantDomains.tenantId, domain: tenantDomains.domain })
-      .from(tenantDomains)
-      .where(and(inArray(tenantDomains.tenantId, tenantIds), eq(tenantDomains.status, 'verified')))
-    const map: Record<string, string> = {}
-    for (const row of rows) {
-      map[row.tenantId] ??= row.domain
-    }
-    return map
   }
 }

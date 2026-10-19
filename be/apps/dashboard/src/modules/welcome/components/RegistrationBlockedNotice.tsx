@@ -20,7 +20,7 @@ export const RegistrationBlockedNotice = ({ tenantSlug }: RegistrationBlockedNot
       return null
     }
     try {
-      return buildTenantUrl(tenantSlug, '/login')
+      return buildTenantUrl(tenantSlug, '/platform/login')
     } catch {
       return null
     }

@@ -9,9 +9,9 @@ export const getCurrentHostname = (): string | null => {
 export const buildRegistrationUrl = (): string => {
   try {
     const { protocol, host } = window.location
-    return `${protocol}//${host}/welcome`
+    return `${protocol}//${host}/platform/welcome`
   } catch {
-    return '/welcome'
+    return '/platform/welcome'
   }
 }
 

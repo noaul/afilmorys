@@ -135,8 +135,6 @@ export interface SuperAdminTenantSummary {
   createdAt: string
   updatedAt: string
   usageTotals?: BillingUsageTotalsEntry[]
-  ownerEmail?: string | null
-  customDomain?: string | null
 }
 
 export interface SuperAdminTenantListResponse {

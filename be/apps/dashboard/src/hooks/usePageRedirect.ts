@@ -210,8 +210,7 @@ export function usePageRedirect() {
     }
 
     const currentSlug = getTenantSlugFromHost(window.location.hostname)
-    // Single-domain deployments have no tenant subdomains to redirect to
-    if (!currentSlug || currentSlug === activeWorkspace.slug) {
+    if (currentSlug === activeWorkspace.slug) {
       return
     }
 
